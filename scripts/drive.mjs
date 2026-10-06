@@ -1,5 +1,6 @@
 // Smoke test: drives the built app (npm run build first) with Playwright.
 // Usage: node scripts/drive.mjs [midi-file]
+// Set APP_EXECUTABLE to test a packaged build (npm run build:dir) instead.
 // To test against the dev server instead, run `npx electron-vite dev --rendererOnly` and set
 // ELECTRON_RENDERER_URL to its URL (main and preload still come from the last build).
 // Opens the MIDI file through File > Open (the dialog is stubbed), then checks playback:
@@ -42,9 +43,11 @@ const check = (name, ok, detail) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`)
 }
 
+// APP_EXECUTABLE runs a packaged build instead, e.g. "dist/win-unpacked/Electron MIDI Player.exe".
+const packaged = process.env.APP_EXECUTABLE ? resolve(APP_DIR, process.env.APP_EXECUTABLE) : null
 const app = await electron.launch({
-  executablePath: resolve(APP_DIR, 'node_modules/electron/dist/electron.exe'),
-  args: [APP_DIR, `--user-data-dir=${USER_DATA}`],
+  executablePath: packaged ?? resolve(APP_DIR, 'node_modules/electron/dist/electron.exe'),
+  args: [...(packaged ? [] : [APP_DIR]), `--user-data-dir=${USER_DATA}`],
   env: { ...process.env },
   timeout: 30_000
 })

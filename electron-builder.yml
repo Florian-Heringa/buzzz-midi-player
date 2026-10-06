@@ -1,0 +1,27 @@
+appId: com.electron-midi-player.app
+productName: Electron MIDI Player
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# The renderer is bundled by Vite; only js-synthesizer is loaded at runtime (export worker).
+extraResources:
+  - from: resources/soundfonts
+    to: soundfonts
+    filter:
+      - '*.sf2'
+      - '*LICENSE*'
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName} Setup ${version}.${ext}
+fileAssociations:
+  - ext: [mid, midi]
+    name: MIDI file
+    role: Viewer

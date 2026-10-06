@@ -4,7 +4,7 @@ import { useAppStore } from '../store/appStore'
 
 const MIDI_EXTENSION = /\.midi?$/i
 
-/** Wires the menu, open dialog and drag-and-drop to the app store. */
+/** Wires the menu, open dialog, drag-and-drop and Explorer file opening to the app store. */
 export function useMidiLoader(): {
   openDialog: () => Promise<void>
   loadDroppedFile: (file: File) => Promise<void>
@@ -36,6 +36,13 @@ export function useMidiLoader(): {
     },
     [load, setError]
   )
+
+  // Files opened from Explorer: the one the app started with, then any opened while running.
+  // takeLaunchFile returns the file only once, so StrictMode's double effect is harmless.
+  useEffect(() => {
+    void load(() => window.api.takeLaunchFile())
+    return window.api.onOpenFile((file) => void load(async () => file))
+  }, [load])
 
   useEffect(
     () =>

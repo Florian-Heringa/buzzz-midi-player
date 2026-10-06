@@ -33,6 +33,10 @@ export interface ElectronApi {
   openMidiDialog(): Promise<LoadedMidiFile | null>
   /** Reads a MIDI file from a known path (e.g. after drag-and-drop). */
   readMidiFile(path: string): Promise<LoadedMidiFile>
+  /** The MIDI file the app was launched with (e.g. from Explorer); returns it only once. */
+  takeLaunchFile(): Promise<LoadedMidiFile | null>
+  /** Subscribes to MIDI files opened from Explorer while the app is running. */
+  onOpenFile(listener: (file: LoadedMidiFile) => void): () => void
   /** Reads the bundled General MIDI SoundFont. */
   loadSoundFont(): Promise<Uint8Array>
   /** Reads the settings auto-saved for a MIDI file, or null if there are none. */
@@ -61,6 +65,8 @@ export interface ElectronApi {
 export const IpcChannels = {
   openMidiDialog: 'midi:open-dialog',
   readMidiFile: 'midi:read-file',
+  takeLaunchFile: 'midi:take-launch-file',
+  openFile: 'midi:open-file',
   loadSoundFont: 'soundfont:load',
   readAutoPreset: 'preset:read-auto',
   writeAutoPreset: 'preset:write-auto',

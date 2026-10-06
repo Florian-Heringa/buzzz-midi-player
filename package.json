@@ -16,17 +16,14 @@
     "build:win": "electron-vite build && electron-builder --win",
     "fetch-soundfont": "node scripts/fetch-soundfont.mjs",
     "make-samples": "node scripts/make-samples.mjs",
-    "smoke": "electron-vite build && node scripts/drive.mjs"
+    "smoke": "electron-vite build && node scripts/drive.mjs",
+    "build:dir": "electron-vite build && electron-builder --win --dir"
   },
   "dependencies": {
-    "@breezystack/lamejs": "^1.2.7",
-    "js-synthesizer": "^1.13.0",
-    "midi-file": "^1.2.4",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "zustand": "^5.0.15"
+    "js-synthesizer": "^1.13.0"
   },
   "devDependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
@@ -37,11 +34,15 @@
     "electron-vite": "^5.0.0",
     "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "midi-file": "^1.2.4",
     "playwright-core": "^1.63.0",
     "prettier": "^3.9.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
     "vite": "^7.3.7",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "zustand": "^5.0.15"
   }
 }

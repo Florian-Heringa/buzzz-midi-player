@@ -4,6 +4,8 @@ import { IpcChannels, type ElectronApi, type MenuCommand } from '../shared/api'
 const api: ElectronApi = {
   openMidiDialog: () => ipcRenderer.invoke(IpcChannels.openMidiDialog),
   readMidiFile: (path) => ipcRenderer.invoke(IpcChannels.readMidiFile, path),
+  takeLaunchFile: () => ipcRenderer.invoke(IpcChannels.takeLaunchFile),
+  onOpenFile: (listener) => subscribe(IpcChannels.openFile, listener),
   loadSoundFont: () => ipcRenderer.invoke(IpcChannels.loadSoundFont),
   readAutoPreset: (hash) => ipcRenderer.invoke(IpcChannels.readAutoPreset, hash),
   writeAutoPreset: (hash, preset) => ipcRenderer.invoke(IpcChannels.writeAutoPreset, hash, preset),
