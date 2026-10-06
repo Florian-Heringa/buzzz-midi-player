@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    // lamejs only resolves to its ES module build when bundled (its require() entry is an IIFE).
+    plugins: [externalizeDepsPlugin({ exclude: ['@breezystack/lamejs'] })]
   },
   preload: {
     plugins: [externalizeDepsPlugin()]

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { LoadedMidiFile } from '@shared/api'
 import { AudioEngine } from '../audio/engine'
+import { buildExportMidi } from '../audio/exportMix'
 import { channelStates, defaultMix, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
@@ -38,6 +39,9 @@ interface AppState {
   /** Playback speed relative to the file's tempo (1 = original). */
   tempoFactor: number
   exportSettings: ExportSettings
+  exportDialogOpen: boolean
+  /** Export render progress 0–1, or null when no export is running. */
+  exportProgress: number | null
   error: string | null
   /** Short-lived confirmation message, e.g. "Preset saved". */
   notice: string | null
@@ -52,6 +56,10 @@ interface AppState {
   setTempoFactor(factor: number): void
   updateMix(trackId: number, change: Partial<TrackMix>): void
   setExportSettings(change: Partial<ExportSettings>): void
+  openExportDialog(): void
+  closeExportDialog(): void
+  startExport(): Promise<void>
+  cancelExport(): void
   savePresetAs(): Promise<void>
   loadPresetFromFile(): Promise<void>
   resetSettings(): void
@@ -62,6 +70,7 @@ interface AppState {
 let engine: AudioEngine | null = null
 let enginePromise: Promise<AudioEngine> | null = null
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
+let exportCancelled = false
 
 export const useAppStore = create<AppState>((set, get) => {
   /** Creates the audio engine once, loading the SoundFont from the main process. */
@@ -145,6 +154,8 @@ export const useAppStore = create<AppState>((set, get) => {
     positionTick: 0,
     tempoFactor: 1,
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
+    exportDialogOpen: false,
+    exportProgress: null,
     error: null,
     notice: null,
 
@@ -237,11 +248,63 @@ export const useAppStore = create<AppState>((set, get) => {
 
     setExportSettings: (change) => set({ exportSettings: { ...get().exportSettings, ...change } }),
 
+    openExportDialog: () => {
+      if (get().song) set({ exportDialogOpen: true })
+    },
+
+    closeExportDialog: () => {
+      get().cancelExport()
+      set({ exportDialogOpen: false })
+    },
+
+    startExport: async () => {
+      const { song, assignment, file, mixes, selectedTrackId, tempoFactor, exportSettings } = get()
+      if (!song || !assignment || !file || get().exportProgress !== null) return
+
+      const practice = selectedTrackId !== null ? song.tracks[selectedTrackId]?.name : undefined
+      const suffix =
+        exportSettings.mode === 'practice-solo'
+          ? ` - ${practice}`
+          : exportSettings.mode === 'practice-muted'
+            ? ` - without ${practice}`
+            : ''
+      const tempo = tempoFactor === 1 ? '' : ` (${Math.round(tempoFactor * 100)}%)`
+      const defaultName = `${file.name.replace(/\.midi?$/i, '')}${suffix}${tempo}.mp3`
+
+      exportCancelled = false
+      set({ exportProgress: 0, error: null })
+      const unsubscribe = window.api.onExportProgress((fraction) => set({ exportProgress: fraction }))
+      try {
+        const result = await window.api.exportMp3({
+          defaultName,
+          midi: buildExportMidi(song, assignment, mixes, selectedTrackId, exportSettings.mode),
+          durationTicks: song.durationTicks,
+          tempoFactor,
+          bitrate: exportSettings.bitrate
+        })
+        if (result) {
+          set({ exportDialogOpen: false })
+          get().showNotice(`Exported ${result.path.split(/[\\/]/).pop()}`)
+        }
+      } catch (err) {
+        if (!exportCancelled) set({ error: `Export failed: ${errorText(err)}` })
+      } finally {
+        unsubscribe()
+        set({ exportProgress: null })
+      }
+    },
+
+    cancelExport: () => {
+      if (get().exportProgress === null) return
+      exportCancelled = true
+      void window.api.cancelExport()
+    },
+
     savePresetAs: async () => {
       const { song, file } = get()
       if (!song || !file) return
       const preset = createPreset(song, get(), file)
-      const name = file.name.replace(/.midi?$/i, '') + ' preset.json'
+      const name = file.name.replace(/\.midi?$/i, '') + ' preset.json'
       try {
         if (await window.api.savePresetDialog(preset, name)) get().showNotice('Preset saved')
       } catch (err) {

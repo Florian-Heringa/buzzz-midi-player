@@ -3,6 +3,7 @@ import { createHash } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 import { IpcChannels, type LoadedMidiFile, type MenuCommand } from '../shared/api'
+import { registerExportHandlers } from './export/exportHandler'
 
 const MIDI_FILTERS = [{ name: 'MIDI files', extensions: ['mid', 'midi'] }]
 const PRESET_FILTERS = [{ name: 'Player presets', extensions: ['json'] }]
@@ -59,6 +60,12 @@ function buildMenu(): void {
           accelerator: 'CmdOrCtrl+Shift+O',
           click: () => sendMenuCommand('load-preset')
         },
+        {
+          label: 'Export MP3…',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => sendMenuCommand('export-mp3')
+        },
+        { type: 'separator' },
         {
           label: 'Reset Mix and Tempo',
           click: () => sendMenuCommand('reset-settings')
@@ -126,6 +133,8 @@ function registerIpc(): void {
       throw new Error(`${basename(result.filePaths[0])} is not a valid JSON file.`)
     }
   })
+
+  registerExportHandlers(() => mainWindow, soundFontPath)
 
   ipcMain.handle(IpcChannels.loadSoundFont, async () => {
     const path = soundFontPath()

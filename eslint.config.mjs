@@ -22,7 +22,9 @@ export default tseslint.config(
         AudioNode: 'readonly',
         AudioDestinationNode: 'readonly',
         HTMLInputElement: 'readonly',
-        Event: 'readonly'
+        Event: 'readonly',
+        AudioContext: 'readonly',
+        atob: 'readonly'
       }
     }
   },

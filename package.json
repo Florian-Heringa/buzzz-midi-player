@@ -19,6 +19,7 @@
     "smoke": "electron-vite build && node scripts/drive.mjs"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "js-synthesizer": "^1.13.0",
     "midi-file": "^1.2.4",
     "react": "^19.3.0",

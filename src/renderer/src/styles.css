@@ -406,3 +406,80 @@ input[type='range'] {
   color: var(--text);
   font-size: 0.85rem;
 }
+
+.button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.export-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.export-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.export-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+}
+
+.export-dialog fieldset {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.export-dialog__mode {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 4px 0;
+}
+
+.export-dialog__mode small {
+  display: block;
+  color: var(--muted);
+}
+
+.export-dialog__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.export-dialog__tempo {
+  color: var(--muted);
+}
+
+.export-dialog__progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.export-dialog__progress progress {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.export-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

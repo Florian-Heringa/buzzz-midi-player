@@ -10,13 +10,18 @@ const api: ElectronApi = {
   savePresetDialog: (preset, defaultName) =>
     ipcRenderer.invoke(IpcChannels.savePresetDialog, preset, defaultName),
   openPresetDialog: () => ipcRenderer.invoke(IpcChannels.openPresetDialog),
+  exportMp3: (request) => ipcRenderer.invoke(IpcChannels.exportMp3, request),
+  cancelExport: () => ipcRenderer.invoke(IpcChannels.cancelExport),
+  onExportProgress: (listener) => subscribe(IpcChannels.exportProgress, listener),
   getPathForFile: (file) => webUtils.getPathForFile(file),
-  onMenuCommand: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, command: MenuCommand): void =>
-      listener(command)
-    ipcRenderer.on(IpcChannels.menuCommand, handler)
-    return () => ipcRenderer.removeListener(IpcChannels.menuCommand, handler)
-  }
+  onMenuCommand: (listener) => subscribe<MenuCommand>(IpcChannels.menuCommand, listener)
+}
+
+/** Forwards messages on a channel to a listener; returns an unsubscribe function. */
+function subscribe<T>(channel: string, listener: (value: T) => void): () => void {
+  const handler = (_event: Electron.IpcRendererEvent, value: T): void => listener(value)
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
 }
 
 contextBridge.exposeInMainWorld('api', api)

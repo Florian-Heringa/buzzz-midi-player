@@ -7,8 +7,25 @@ export interface LoadedMidiFile {
   data: Uint8Array
 }
 
+/** What the renderer asks the main process to export as MP3. */
+export interface ExportRequest {
+  /** Suggested file name for the save dialog. */
+  defaultName: string
+  /** Playback MIDI file with the export mix written at tick 0. */
+  midi: Uint8Array
+  durationTicks: number
+  tempoFactor: number
+  /** MP3 bitrate in kbps. */
+  bitrate: number
+}
+
+export interface ExportResult {
+  path: string
+  seconds: number
+}
+
 /** Commands sent from the application menu to the renderer. */
-export type MenuCommand = 'open-midi' | 'save-preset' | 'load-preset' | 'reset-settings'
+export type MenuCommand = 'open-midi' | 'save-preset' | 'load-preset' | 'reset-settings' | 'export-mp3'
 
 /** API exposed to the renderer through the preload script as `window.api`. */
 export interface ElectronApi {
@@ -26,6 +43,15 @@ export interface ElectronApi {
   savePresetDialog(preset: unknown, defaultName: string): Promise<boolean>
   /** Shows an open dialog and reads a preset file. Resolves to null when cancelled. */
   openPresetDialog(): Promise<unknown>
+  /**
+   * Asks where to save, then renders and writes the MP3. Resolves to null when the save
+   * dialog is cancelled; rejects if rendering fails or `cancelExport` is called.
+   */
+  exportMp3(request: ExportRequest): Promise<ExportResult | null>
+  /** Stops a running export. */
+  cancelExport(): Promise<void>
+  /** Subscribes to export progress (0–1). Returns an unsubscribe function. */
+  onExportProgress(listener: (fraction: number) => void): () => void
   /** Resolves the filesystem path of a File dropped onto the window. */
   getPathForFile(file: File): string
   /** Subscribes to application menu commands. Returns an unsubscribe function. */
@@ -40,5 +66,8 @@ export const IpcChannels = {
   writeAutoPreset: 'preset:write-auto',
   savePresetDialog: 'preset:save-dialog',
   openPresetDialog: 'preset:open-dialog',
+  exportMp3: 'export:mp3',
+  cancelExport: 'export:cancel',
+  exportProgress: 'export:progress',
   menuCommand: 'menu:command'
 } as const

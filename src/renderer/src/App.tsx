@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import { StaffView } from './notation/StaffView'
 import { useAppStore } from './store/appStore'
+import { ExportDialog } from './ui/ExportDialog'
 import { PracticeHeader } from './ui/PracticeHeader'
 import { SongInfo } from './ui/SongInfo'
 import { TrackList } from './ui/TrackList'
@@ -14,6 +15,7 @@ export default function App(): React.JSX.Element {
   )
   const error = useAppStore((s) => s.error)
   const notice = useAppStore((s) => s.notice)
+  const openExportDialog = useAppStore((s) => s.openExportDialog)
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
 
@@ -36,6 +38,9 @@ export default function App(): React.JSX.Element {
     >
       <header className="toolbar">
         <button onClick={() => void openDialog()}>Open MIDI…</button>
+        <button onClick={openExportDialog} disabled={!song}>
+          Export MP3…
+        </button>
         <span className="toolbar__file">{song ? song.name : 'No file loaded'}</span>
         {notice && (
           <span className="toolbar__notice" role="status">
@@ -69,6 +74,8 @@ export default function App(): React.JSX.Element {
           <p className="placeholder">Open a MIDI file or drop one here.</p>
         </main>
       )}
+
+      <ExportDialog />
     </div>
   )
 }

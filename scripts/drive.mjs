@@ -206,6 +206,59 @@ try {
   await page.waitForSelector('text=Preset loaded')
   check('loading a preset applies it', (await tempoValue()) === '75' && (await altoMuted()) === 'true')
 
+  // Export: render the current mix (tempo is 75% from the preset) and decode the MP3.
+  const mp3File = join(USER_DATA, 'export.mp3')
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
+  }, mp3File)
+  await page.click('text=Export MP3…')
+  await page.click('.export-dialog input[value="mix"]')
+  const started = Date.now()
+  await page.click('.export-dialog .button--primary')
+  await page.waitForFunction(
+    () =>
+      document.querySelector('.error') ||
+      document.querySelector('.toolbar__notice')?.textContent?.startsWith('Exported'),
+    null,
+    { timeout: 120_000 }
+  )
+  const exportError = await page.locator('.error').allInnerTexts()
+  if (exportError.length) console.log('export error:', exportError.join('; '))
+  const renderSeconds = (Date.now() - started) / 1000
+  const decoded = existsSync(mp3File)
+    ? await page.evaluate(async (base64) => {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+        const audio = await new AudioContext().decodeAudioData(bytes.buffer)
+        const data = audio.getChannelData(0)
+        let sum = 0
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i]
+        return { duration: audio.duration, rms: Math.sqrt(sum / data.length) }
+      }, readFileSync(mp3File).toString('base64'))
+    : null
+  // 25.4 s at 75% tempo ≈ 33.9 s, plus up to 4 s of release tail.
+  const expected = 25.43 / 0.75
+  check(
+    'MP3 export has the song length at the chosen tempo',
+    decoded !== null && decoded.duration > expected && decoded.duration < expected + 4.5,
+    decoded ? `${decoded.duration.toFixed(1)} s, rendered in ${renderSeconds.toFixed(1)} s` : 'no file'
+  )
+  check('MP3 export is not silent', (decoded?.rms ?? 0) > 0.005, `RMS ${decoded?.rms.toFixed(4)}`)
+
+  // Cancelling mid-render leaves no file and no error.
+  const cancelledFile = join(USER_DATA, 'cancelled.mp3')
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
+  }, cancelledFile)
+  await page.click('text=Export MP3…')
+  await page.click('.export-dialog .button--primary')
+  await page.waitForSelector('.export-dialog__progress')
+  await page.click('.export-dialog >> text=Cancel')
+  await page.waitForTimeout(3000)
+  check(
+    'cancelled export writes nothing',
+    !existsSync(cancelledFile) && (await page.locator('.export-dialog').count()) === 0
+  )
+
   const uiErrors = await page.locator('.error').allInnerTexts()
   check('no error banner', uiErrors.length === 0, uiErrors.join('; '))
 } finally {
