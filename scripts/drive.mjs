@@ -68,8 +68,8 @@ try {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
   }, MIDI)
   await page.click('text=Open MIDI')
-  await page.waitForSelector('.track-list__item')
-  console.log('tracks:', (await page.locator('.track-list__name').allInnerTexts()).join(', '))
+  await page.waitForSelector('.strip')
+  console.log('tracks:', (await page.locator('.strip__name').allInnerTexts()).join(', '))
   await page.waitForFunction(() => !document.querySelector('.transport__status'), null, {
     timeout: 30_000
   })
@@ -89,15 +89,48 @@ try {
   }
 
   // Staff: one notehead per note for each track, screenshot per track.
-  const names = await page.locator('.track-list__name').allInnerTexts()
+  const names = await page.locator('.strip__name').allInnerTexts()
   for (let i = 0; i < names.length; i++) {
-    await page.locator('.track-list__name').nth(i).click()
-    const expected = Number((await page.locator('.track-list__meta').nth(i).innerText()).match(/(\d+) notes/)?.[1])
+    await page.locator('.strip__name').nth(i).click()
+    const expected = Number((await page.locator('.strip__meta').nth(i).getAttribute('title')).match(/(\d+) notes/)?.[1])
     const heads = await page.locator('.staff-view__svg .staff__notehead:not(.staff__notehead--sounding)').count()
     check(`staff shows every ${names[i]} note`, heads === expected, `${heads}/${expected}`)
     await page.locator('.staff-view').screenshot({ path: resolve(SHOT_DIR, `staff-${names[i]}.png`) })
   }
-  await page.locator('.track-list__name').first().click()
+  await page.locator('.strip__name').first().click()
+  await page.screenshot({ path: resolve(SHOT_DIR, 'layout.png') })
+
+  // Layout: dragging the divider between staff and mixer resizes both panes.
+  const paneHeights = () =>
+    page.locator('.split-panes__pane').evaluateAll((panes) => panes.map((p) => p.clientHeight))
+  const before = await paneHeights()
+  const divider = page.locator('.split-panes__divider').nth(1)
+  const box = await divider.boundingBox()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 80, { steps: 5 })
+  await page.mouse.up()
+  const after = await paneHeights()
+  check(
+    'dragging a divider resizes the panes next to it',
+    Math.abs(after[1] - (before[1] - 80)) <= 2 && Math.abs(after[2] - (before[2] + 80)) <= 2 && after[0] === before[0],
+    `${before.join('/')} → ${after.join('/')}`
+  )
+  const savedSizes = await page.evaluate(() => localStorage.getItem('pane-sizes'))
+  check('pane sizes are remembered', savedSizes !== null)
+  await page.locator('.split-panes__divider').nth(1).dblclick()
+
+  // Loop controls (playback does not loop yet): range stays valid.
+  const loopStart = page.locator('input[aria-label="Loop start bar"]')
+  const loopEnd = page.locator('input[aria-label="Loop end bar"]')
+  check('loop range defaults to the whole song', (await loopStart.inputValue()) === '1' && (await loopEnd.inputValue()) === '8')
+  await loopStart.fill('3')
+  await loopEnd.fill('6')
+  await loopStart.fill('7')
+  check('loop end follows a later start', (await loopStart.inputValue()) === '7' && (await loopEnd.inputValue()) === '7')
+  await page.click('text=⟲ Loop')
+  check('loop toggle', (await page.locator('text=⟲ Loop').getAttribute('aria-pressed')) === 'true')
+  await page.click('text=⟲ Loop')
 
   await page.click('.transport__play')
   await page.waitForTimeout(500)
@@ -135,7 +168,7 @@ try {
 
   // Mixer: mute every track, then seek back. The player replays volume events on seek, so
   // this also checks that the worklet hook keeps the muted values.
-  const muteButtons = page.locator('.mixer__toggle[title="Mute"]')
+  const muteButtons = page.locator('.strip__toggle[title="Mute"]')
   const trackCount = await muteButtons.count()
   for (let i = 0; i < trackCount; i++) await muteButtons.nth(i).click()
   await page.waitForTimeout(1500) // let release tails and reverb fade
@@ -149,13 +182,13 @@ try {
 
   await page.click('text=Solo part')
   await page.waitForTimeout(800)
-  const silencedRows = await page.locator('.track-list__item--silenced').count()
+  const silencedRows = await page.locator('.strip--silenced').count()
   check('solo part silences the other tracks', silencedRows === trackCount - 1, `${silencedRows} silenced`)
   const soloLevel = await level()
   check('soloed part is audible', soloLevel > 0.001, `RMS ${soloLevel.toFixed(4)}`)
   await page.click('text=Solo part')
 
-  await page.locator('.mixer__instrument').first().selectOption('73') // Flute
+  await page.locator('.strip__instrument').first().selectOption('73') // Flute
   await page.waitForTimeout(500)
   check('instrument change keeps playing', (await level()) > 0.001)
   await page.screenshot({ path: resolve(SHOT_DIR, 'mixer.png') })
@@ -178,10 +211,10 @@ try {
     }, label)
   const tempoValue = () => page.locator('.transport__tempo input').inputValue()
   const altoMuted = () =>
-    page.locator('.mixer__toggle[title="Mute"]').nth(1).getAttribute('aria-pressed')
+    page.locator('.strip__toggle[title="Mute"]').nth(1).getAttribute('aria-pressed')
 
   await setRange('.transport__tempo input', 75)
-  await page.locator('.mixer__toggle[title="Mute"]').nth(1).click() // mute Alto
+  await page.locator('.strip__toggle[title="Mute"]').nth(1).click() // mute Alto
   await page.waitForTimeout(1000) // auto-save is debounced
   const presetDir = join(USER_DATA, 'presets')
   const autoFiles = existsSync(presetDir) ? readdirSync(presetDir) : []
@@ -221,7 +254,7 @@ try {
   await page.waitForFunction(
     () =>
       document.querySelector('.error') ||
-      document.querySelector('.toolbar__notice')?.textContent?.startsWith('Exported'),
+      document.querySelector('.top-bar__notice')?.textContent?.startsWith('Exported'),
     null,
     { timeout: 120_000 }
   )

@@ -5,6 +5,8 @@ import { buildExportMidi } from '../audio/exportMix'
 import { channelStates, defaultMix, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
+import { updateLoop, type LoopRange } from '../model/loop'
+import { measureCount } from '../model/measures'
 import { parseSong, type Song } from '../model/song'
 import {
   applyPreset,
@@ -42,6 +44,8 @@ interface AppState {
   exportDialogOpen: boolean
   /** Export render progress 0–1, or null when no export is running. */
   exportProgress: number | null
+  /** Loop range chosen in the UI. Not yet applied to playback. */
+  loop: LoopRange
   error: string | null
   /** Short-lived confirmation message, e.g. "Preset saved". */
   notice: string | null
@@ -60,6 +64,8 @@ interface AppState {
   closeExportDialog(): void
   startExport(): Promise<void>
   cancelExport(): void
+  /** Updates the loop range, keeping start ≤ end within the song's bars. */
+  setLoop(change: Partial<LoopRange>): void
   savePresetAs(): Promise<void>
   loadPresetFromFile(): Promise<void>
   resetSettings(): void
@@ -156,6 +162,7 @@ export const useAppStore = create<AppState>((set, get) => {
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     exportDialogOpen: false,
     exportProgress: null,
+    loop: { enabled: false, startBar: 1, endBar: 1 },
     error: null,
     notice: null,
 
@@ -188,6 +195,7 @@ export const useAppStore = create<AppState>((set, get) => {
         assignment,
         transport: 'stopped',
         positionTick: 0,
+        loop: { enabled: false, startBar: 1, endBar: measureCount(song) },
         error: null
       })
       if (restored) get().showNotice('Restored your settings for this file')
@@ -292,6 +300,11 @@ export const useAppStore = create<AppState>((set, get) => {
         unsubscribe()
         set({ exportProgress: null })
       }
+    },
+
+    setLoop: (change) => {
+      const { song, loop } = get()
+      if (song) set({ loop: updateLoop(loop, change, measureCount(song)) })
     },
 
     cancelExport: () => {

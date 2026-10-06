@@ -1,14 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { measureCount, measureStarts } from '../../model/measures'
 import { parseSong, type Track } from '../../model/song'
 import { buildMidi, note } from '../../model/__tests__/midiBuilder'
-import {
-  accidentalFor,
-  chooseClefs,
-  keyAlteration,
-  layoutStaff,
-  measureStarts,
-  spellPitch
-} from '../staffLayout'
+import { accidentalFor, chooseClefs, keyAlteration, layoutStaff, spellPitch } from '../staffLayout'
 
 const CHOIR = 52
 const trackOf = (pitches: number[], program = CHOIR, name = 'T'): Track => ({
@@ -88,6 +82,7 @@ describe('layoutStaff', () => {
     expect(measureStarts(song)).toEqual([0])
     const twoBars = parseSong(buildMidi([note(0, 60, 1920 * 2)]), 'x.mid')
     expect(measureStarts(twoBars)).toEqual([0, 1920])
+    expect(measureCount(twoBars)).toBe(2)
   })
 
   it('leaves room above the staff for high notes', () => {

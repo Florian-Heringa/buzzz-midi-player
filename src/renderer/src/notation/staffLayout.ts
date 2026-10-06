@@ -1,3 +1,4 @@
+import { measureStarts } from '../model/measures'
 import type { KeySignature, Song, Track } from '../model/song'
 
 export type Clef = 'treble' | 'treble8vb' | 'bass'
@@ -75,18 +76,6 @@ export function chooseClefs(track: Track): Clef[] {
     return ['bass']
   }
   return median >= 59 ? ['treble'] : ['bass']
-}
-
-/** Tick positions of every barline (start of each measure) up to the end of the song. */
-export function measureStarts(song: Song): number[] {
-  const starts: number[] = []
-  song.timeSignatures.forEach((ts, i) => {
-    const next = song.timeSignatures[i + 1]?.tick ?? song.durationTicks
-    const length = (song.ppq * 4 * ts.numerator) / ts.denominator
-    for (let tick = ts.tick; tick < next; tick += length) starts.push(tick)
-  })
-  if (starts.length === 0) starts.push(0)
-  return starts
 }
 
 export function keySignatureAt(song: Song, tick: number): KeySignature {

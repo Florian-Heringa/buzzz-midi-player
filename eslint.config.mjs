@@ -24,6 +24,7 @@ export default tseslint.config(
         HTMLInputElement: 'readonly',
         Event: 'readonly',
         AudioContext: 'readonly',
+        localStorage: 'readonly',
         atob: 'readonly'
       }
     }
