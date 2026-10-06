@@ -142,7 +142,12 @@ function TempoControl(): React.JSX.Element | null {
   const bpm = Math.round(song.tempoMap.bpmAt(positionTick) * tempoFactor)
 
   return (
-    <label className="control-group transport__tempo">
+    // Double-clicking anywhere on the control, including its label and value, resets it.
+    <label
+      className="control-group transport__tempo"
+      onDoubleClick={() => setTempoFactor(1)}
+      title="Double-click to reset to 100%"
+    >
       <span className="control-group__label">Tempo</span>
       <input
         type="range"
@@ -151,8 +156,6 @@ function TempoControl(): React.JSX.Element | null {
         step={5}
         value={Math.round(tempoFactor * 100)}
         onChange={(e) => setTempoFactor(Number(e.target.value) / 100)}
-        onDoubleClick={() => setTempoFactor(1)}
-        title="Double-click to reset to 100%"
       />
       <span className="transport__tempo-value">
         {Math.round(tempoFactor * 100)}% · {bpm} BPM

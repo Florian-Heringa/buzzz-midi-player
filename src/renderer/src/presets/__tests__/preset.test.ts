@@ -15,7 +15,8 @@ const settingsFor = (song: Song): PlayerSettings => ({
   mixes: song.tracks.map((t, i) => ({ ...defaultMix(t), volume: 50 + i, pan: i - 1 })),
   tempoFactor: 0.75,
   selectedTrackId: 1,
-  exportSettings: { bitrate: 128, mode: 'practice-muted' }
+  exportSettings: { bitrate: 128, mode: 'practice-muted' },
+  trackLabels: song.tracks.map((_, i) => (i === 0 ? 'Me' : ''))
 })
 
 describe('presets', () => {
@@ -48,6 +49,14 @@ describe('presets', () => {
     expect(restored.mixes.map((m) => m.volume)).toEqual([50, 51, 100])
   })
 
+  it('keeps custom track names with the matched track', () => {
+    const saved = createPreset(songWith(['Soprano', 'Alto']), settingsFor(songWith(['Soprano', 'Alto'])))
+    expect(saved.tracks[0].label).toBe('Me')
+    expect(saved.tracks[1]).not.toHaveProperty('label')
+    const reordered = songWith(['Alto', 'Soprano'])
+    expect(applyPreset(reordered, saved, reordered.tracks.map(defaultMix)).trackLabels).toEqual(['', 'Me'])
+  })
+
   it('pairs repeated track names in order', () => {
     const song = songWith(['Voice', 'Voice'])
     const saved = createPreset(song, settingsFor(song))
@@ -77,5 +86,10 @@ describe('presets', () => {
     })
     expect(preset.export).toEqual({ bitrate: 192, mode: 'mix' })
     expect(preset.selectedTrack).toBeNull()
+    const labelled = parsePreset({
+      version: 1,
+      tracks: [{ name: 'A', label: '  ' + 'x'.repeat(80) }, { name: 'B', label: '   ' }, { name: 'C', label: 5 }]
+    })
+    expect(labelled.tracks.map((t) => t.label?.length)).toEqual([60, undefined, undefined])
   })
 })

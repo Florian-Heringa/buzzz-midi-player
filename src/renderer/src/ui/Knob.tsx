@@ -100,7 +100,8 @@ export function Knob({
   const text = format(value)
 
   return (
-    <div className="knob">
+    // The value text acts as the knob's label: double-clicking it also resets.
+    <div className="knob" onDoubleClick={() => set(defaultValue)}>
       <div
         ref={dial}
         className="knob__dial"
@@ -117,7 +118,6 @@ export function Knob({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onKeyDown={onKeyDown}
-        onDoubleClick={() => set(defaultValue)}
       >
         <svg width={size} height={size} aria-hidden>
           <path className="knob__track" d={arc(center, radius, -SWEEP / 2, SWEEP / 2)} />

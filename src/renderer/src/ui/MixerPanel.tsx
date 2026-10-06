@@ -1,8 +1,9 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { DEFAULT_VOLUME, effectiveVolume, type TrackMix } from '../audio/mixer'
 import { GM_FAMILIES, GM_PROGRAM_NAMES, midiNoteName } from '../model/gm'
 import { isSounding } from '../model/sounding'
 import { noteRange, type Track } from '../model/song'
+import { MAX_TRACK_LABEL_LENGTH } from '../presets/preset'
 import { useAppStore } from '../store/appStore'
 import { panLabel } from './format'
 import { Knob } from './Knob'
@@ -14,13 +15,21 @@ const panText = (pan: number): string => `Pan ${panLabel(pan)}`
  * Activity meter: the track's audible volume while one of its notes is sounding.
  * Subscribes to the playhead itself so the rest of the strip doesn't re-render every frame.
  */
-function LevelMeter({ track, level }: { track: Track; level: number }): React.JSX.Element {
+function LevelMeter({
+  track,
+  name,
+  level
+}: {
+  track: Track
+  name: string
+  level: number
+}): React.JSX.Element {
   const active = useAppStore(
     (s) => s.transport === 'playing' && isSounding(track, s.positionTick)
   )
   const shown = active ? level : 0
   return (
-    <div className="strip__meter" role="meter" aria-label={`${track.name} level`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}>
+    <div className="strip__meter" role="meter" aria-label={`${name} level`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}>
       <div className="strip__meter-fill" style={{ height: `${shown * 100}%` }} />
     </div>
   )
@@ -32,6 +41,7 @@ export function MixerPanel(): React.JSX.Element {
   const mixes = useAppStore((s) => s.mixes)
   const assignment = useAppStore((s) => s.assignment)
   const selectedTrackId = useAppStore((s) => s.selectedTrackId)
+  const trackLabels = useAppStore((s) => s.trackLabels)
   if (!song) return <p className="placeholder mixer-panel__empty">The mixer appears when a file is open.</p>
   const anySolo = mixes.some((m) => m.solo)
 
@@ -41,6 +51,7 @@ export function MixerPanel(): React.JSX.Element {
         <ChannelStrip
           key={track.id}
           track={track}
+          name={trackLabels[track.id] || track.name}
           mix={mixes[track.id]}
           selected={track.id === selectedTrackId}
           shared={assignment?.sharedTrackIds.has(track.id) ?? false}
@@ -53,12 +64,15 @@ export function MixerPanel(): React.JSX.Element {
 
 function ChannelStrip({
   track,
+  name,
   mix,
   selected,
   shared,
   anySolo
 }: {
   track: Track
+  /** Display name: custom name or the name from the file. */
+  name: string
   mix: TrackMix
   selected: boolean
   shared: boolean
@@ -75,16 +89,9 @@ function ChannelStrip({
       className={['strip', selected && 'strip--selected', silenced && 'strip--silenced']
         .filter(Boolean)
         .join(' ')}
-      aria-label={track.name}
+      aria-label={name}
     >
-      <button
-        className="strip__name"
-        aria-pressed={selected}
-        onClick={() => selectTrack(track.id)}
-        title={selected ? `${track.name} (practice part)` : `Practice ${track.name}`}
-      >
-        {track.name}
-      </button>
+      <TrackName track={track} name={name} selected={selected} onSelect={() => selectTrack(track.id)} />
       <span className="strip__meta" title={`${track.notes.length} notes`}>
         {range && !track.isDrum
           ? `${midiNoteName(range.low)}–${midiNoteName(range.high)}`
@@ -107,7 +114,7 @@ function ChannelStrip({
 
       <div className="strip__knobs">
         <Knob
-          label={`${track.name} pan`}
+          label={`${name} pan`}
           value={mix.pan}
           min={-64}
           max={63}
@@ -117,7 +124,7 @@ function ChannelStrip({
           onChange={(pan) => update({ pan })}
         />
         <Knob
-          label={`${track.name} volume`}
+          label={`${name} volume`}
           value={mix.volume}
           min={0}
           max={127}
@@ -127,7 +134,7 @@ function ChannelStrip({
         />
       </div>
 
-      <LevelMeter track={track} level={effectiveVolume(mix, anySolo) / 127} />
+      <LevelMeter track={track} name={name} level={effectiveVolume(mix, anySolo) / 127} />
 
       <div className="strip__toggles">
         <button
@@ -148,6 +155,64 @@ function ChannelStrip({
         </button>
       </div>
     </section>
+  )
+}
+
+/**
+ * Track name button: click to make it the practice part, double-click to rename.
+ * Renaming saves on Enter or when focus leaves; Escape cancels; an empty name restores
+ * the name from the MIDI file.
+ */
+function TrackName({
+  track,
+  name,
+  selected,
+  onSelect
+}: {
+  track: Track
+  name: string
+  selected: boolean
+  onSelect: () => void
+}): React.JSX.Element {
+  const renameTrack = useAppStore((s) => s.renameTrack)
+  const [draft, setDraft] = useState<string | null>(null)
+
+  if (draft !== null) {
+    const finish = (save: boolean): void => {
+      if (save) renameTrack(track.id, draft)
+      setDraft(null)
+    }
+    return (
+      <input
+        className="strip__name strip__name-input"
+        type="text"
+        value={draft}
+        maxLength={MAX_TRACK_LABEL_LENGTH}
+        autoFocus
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => finish(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') finish(true)
+          else if (e.key === 'Escape') finish(false)
+        }}
+        aria-label={`Rename ${name}`}
+        placeholder={track.name}
+      />
+    )
+  }
+
+  const renamed = name !== track.name
+  return (
+    <button
+      className="strip__name"
+      aria-pressed={selected}
+      onClick={onSelect}
+      onDoubleClick={() => setDraft(name)}
+      title={`${selected ? `${name} (practice part)` : `Practice ${name}`}${renamed ? ` · originally "${track.name}"` : ''} · double-click to rename`}
+    >
+      {name}
+    </button>
   )
 }
 

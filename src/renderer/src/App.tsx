@@ -8,9 +8,6 @@ import { SplitPanes } from './ui/SplitPanes'
 import { TopBar } from './ui/TopBar'
 import { useMidiLoader } from './ui/useMidiLoader'
 
-/** Default heights of the controls, staff and mixer panes, as fractions. */
-const DEFAULT_PANE_SIZES = [0.2, 0.42, 0.38]
-
 export default function App(): React.JSX.Element {
   const song = useAppStore((s) => s.song)
   const selectedTrack = useAppStore((s) =>
@@ -37,10 +34,11 @@ export default function App(): React.JSX.Element {
       onDrop={onDrop}
     >
       <SplitPanes
-        defaultSizes={DEFAULT_PANE_SIZES}
-        storageKey="pane-sizes"
-        // Controls and mixer never get smaller than their content, so no text is cut off.
-        minSizes={['content', 'default', 'content']}
+        // Controls and staff fit their content; the mixer takes the rest. Controls and mixer
+        // never get smaller than their content, so no text is cut off.
+        fillPane={2}
+        minSizes={['content', 80, 'content']}
+        storageKey="pane-layout"
         labels={['controls', 'staff', 'mixer']}
       >
         <TopBar onOpen={() => void openDialog()} />

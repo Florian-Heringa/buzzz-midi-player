@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import type { Song, Track } from '../model/song'
-import { useAppStore } from '../store/appStore'
+import { trackDisplayName, useAppStore } from '../store/appStore'
 import { layoutStaff, type Accidental, type Clef, type StaffLayout } from './staffLayout'
 
 // U+FE0E requests the text (not emoji) presentation, which Windows otherwise draws in color.
@@ -16,6 +16,7 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
   const layout = useMemo(() => layoutStaff(song, track), [song, track])
   const scroller = useRef<HTMLDivElement>(null)
   const seek = useAppStore((s) => s.seek)
+  const name = useAppStore((s) => trackDisplayName(s, track.id))
 
   // Back to the start when switching track or song.
   useEffect(() => {
@@ -68,7 +69,7 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
           onMouseMove={onMouseMove}
           onMouseLeave={onMouseLeave}
           role="img"
-          aria-label={`Staff for ${track.name}. Click to move the playhead.`}
+          aria-label={`Staff for ${name}. Click to move the playhead.`}
         >
           <StaticStaff layout={layout} />
           <line

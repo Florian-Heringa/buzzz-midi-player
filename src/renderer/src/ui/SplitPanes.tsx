@@ -1,16 +1,17 @@
 import { Children, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 
 const DIVIDER_PX = 6
-/** Arrow keys move a divider by this fraction of the available height. */
-const KEY_STEP = 0.02
+/** Arrow keys move a divider by this many pixels. */
+const KEY_STEP_PX = 16
+
+/** A pane's height: 'fit' sizes it to its content; a number is a height in px set by dragging. */
+export type PaneSize = 'fit' | number
 
 interface SplitPanesProps {
-  /** Initial pane sizes as fractions; one per child. */
-  defaultSizes: number[]
-  /** Smallest height a pane can be dragged to. */
-  minPanePx?: number
-  /** Per pane: never smaller than its content ('content') or the default minimum. */
-  minSizes?: ('content' | 'default')[]
+  /** Index of the pane that takes the remaining height. */
+  fillPane: number
+  /** Per pane minimum: 'content' (never smaller than its content) or a height in px. */
+  minSizes: ('content' | number)[]
   /** localStorage key to remember sizes per viewer. */
   storageKey?: string
   /** Accessible names of the panes, used to label the dividers. */
@@ -18,95 +19,108 @@ interface SplitPanesProps {
   children: ReactNode
 }
 
-/** Vertically stacked panes separated by draggable dividers. */
+/**
+ * Vertically stacked panes separated by draggable dividers. Panes fit their content until
+ * resized; the fill pane takes what is left. A divider resizes the adjacent pane that isn't
+ * the fill pane; double-clicking it returns that pane to fitting its content.
+ */
 export function SplitPanes({
-  defaultSizes,
-  minPanePx = 48,
-  minSizes = [],
+  fillPane,
+  minSizes,
   storageKey,
   labels = [],
   children
 }: SplitPanesProps): React.JSX.Element {
   const panes = Children.toArray(children)
-  const [sizes, setSizes] = useState(() => loadSizes(storageKey, defaultSizes))
-  const container = useRef<HTMLDivElement>(null)
+  const [sizes, setSizes] = useState<PaneSize[]>(() => loadSizes(storageKey, panes.length))
+  const paneRefs = useRef<(HTMLDivElement | null)[]>([])
 
-  const update = (next: number[]): void => {
+  const update = (next: PaneSize[], persist = true): void => {
     setSizes(next)
-    saveSizes(storageKey, next)
+    if (persist) saveSizes(storageKey, next)
   }
 
-  /**
-   * Content minimums are enforced by the grid, so the requested fractions can disagree with
-   * what is shown. Re-reading the rendered heights keeps further drags from having a dead zone.
-   */
-  const syncToRendered = (): void => {
-    const heights = [...(container.current?.children ?? [])]
-      .filter((el) => el.classList.contains('split-panes__pane'))
-      .map((el) => el.getBoundingClientRect().height)
-    if (heights.length === panes.length && heights.every((h) => h > 0)) {
-      const total = heights.reduce((a, b) => a + b, 0)
-      update(heights.map((h) => h / total))
+  /** The pane a divider resizes: the neighbour that isn't the fill pane. */
+  const resizedPane = (divider: number): number => (divider === fillPane ? divider + 1 : divider)
+
+  /** Range of heights the pane can take without squeezing the others below their minimum. */
+  const limits = (pane: number): { start: number; min: number; max: number } => {
+    const heights = paneRefs.current.map((el) => el?.getBoundingClientRect().height ?? 0)
+    const container = paneRefs.current[0]?.parentElement?.clientHeight ?? 0
+    const minOf = (i: number): number => {
+      const min = minSizes[i] ?? 0
+      return min === 'content' ? minContentHeight(paneRefs.current[i]) : min
     }
+    const others = heights.reduce(
+      (sum, h, i) => (i === pane ? sum : i === fillPane ? sum + minOf(i) : sum + h),
+      0
+    )
+    const min = minOf(pane)
+    const max = Math.max(min, container - others - DIVIDER_PX * (panes.length - 1))
+    return { start: heights[pane], min, max }
   }
 
-  /** Height available to panes, excluding dividers. */
-  const availablePx = (): number =>
-    (container.current?.clientHeight ?? 0) - DIVIDER_PX * (panes.length - 1)
-
-  /** Moves the divider below pane `index` by `delta` (fraction of available height). */
-  const moveDivider = (start: number[], index: number, delta: number): number[] => {
-    const total = start.reduce((a, b) => a + b, 0)
-    const min = (minPanePx / Math.max(availablePx(), 1)) * total
-    const pair = start[index] + start[index + 1]
-    const above = Math.max(min, Math.min(pair - min, start[index] + delta * total))
-    const next = [...start]
-    next[index] = above
-    next[index + 1] = pair - above
-    return next
-  }
-
-  const onPointerDown = (index: number) => (event: PointerEvent<HTMLDivElement>) => {
+  const onPointerDown = (divider: number) => (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
-    const divider = event.currentTarget
-    divider.setPointerCapture(event.pointerId)
+    const handle = event.currentTarget
+    handle.setPointerCapture(event.pointerId)
+    const pane = resizedPane(divider)
+    // Dragging down grows the pane above the divider and shrinks the one below.
+    const direction = pane === divider ? 1 : -1
+    const { start, min, max } = limits(pane)
     const startY = event.clientY
-    const startSizes = sizes
     let latest = sizes
     const onMove = (move: globalThis.PointerEvent): void => {
-      const delta = (move.clientY - startY) / Math.max(availablePx(), 1)
-      latest = moveDivider(startSizes, index, delta)
-      setSizes(latest)
+      const height = clamp(start + direction * (move.clientY - startY), min, max)
+      latest = sizes.map((size, i) => (i === pane ? Math.round(height) : size))
+      update(latest, false)
     }
     const onUp = (): void => {
       saveSizes(storageKey, latest)
-      requestAnimationFrame(syncToRendered)
-      divider.removeEventListener('pointermove', onMove)
-      divider.removeEventListener('pointerup', onUp)
-      divider.removeEventListener('pointercancel', onUp)
+      handle.removeEventListener('pointermove', onMove)
+      handle.removeEventListener('pointerup', onUp)
+      handle.removeEventListener('pointercancel', onUp)
     }
-    divider.addEventListener('pointermove', onMove)
-    divider.addEventListener('pointerup', onUp)
-    divider.addEventListener('pointercancel', onUp)
+    handle.addEventListener('pointermove', onMove)
+    handle.addEventListener('pointerup', onUp)
+    handle.addEventListener('pointercancel', onUp)
   }
 
-  const onKeyDown = (index: number) => (event: KeyboardEvent<HTMLDivElement>) => {
-    const delta = event.key === 'ArrowUp' ? -KEY_STEP : event.key === 'ArrowDown' ? KEY_STEP : 0
+  const onKeyDown = (divider: number) => (event: KeyboardEvent<HTMLDivElement>) => {
+    const delta = event.key === 'ArrowUp' ? -KEY_STEP_PX : event.key === 'ArrowDown' ? KEY_STEP_PX : 0
     if (!delta) return
     event.preventDefault()
-    update(moveDivider(sizes, index, delta))
-    requestAnimationFrame(syncToRendered)
+    const pane = resizedPane(divider)
+    const { start, min, max } = limits(pane)
+    const height = clamp(start + (pane === divider ? delta : -delta), min, max)
+    update(sizes.map((size, i) => (i === pane ? Math.round(height) : size)))
   }
 
-  const total = sizes.reduce((a, b) => a + b, 0)
-  const rows = sizes
-    .map((size, i) => `minmax(${minSizes[i] === 'content' ? 'min-content' : `${minPanePx}px`}, ${size}fr)`)
+  const fit = (divider: number): void => {
+    const pane = resizedPane(divider)
+    update(sizes.map((size, i) => (i === pane ? 'fit' : size)))
+  }
+
+  const rows = panes
+    .map((_, i) => {
+      const min = minSizes[i] === 'content' ? 'min-content' : `${minSizes[i] ?? 0}px`
+      if (i === fillPane) return `minmax(${min}, 1fr)`
+      const size = sizes[i] ?? 'fit'
+      // Fitting panes grow to their content only as far as the fill pane's minimum allows.
+      return size === 'fit' ? `minmax(${min}, max-content)` : `minmax(${min}, ${size}px)`
+    })
     .join(` ${DIVIDER_PX}px `)
 
   return (
-    <div className="split-panes" ref={container} style={{ gridTemplateRows: rows }}>
+    <div className="split-panes" style={{ gridTemplateRows: rows }}>
       {panes.map((pane, index) => [
-        <div key={`pane-${index}`} className="split-panes__pane">
+        <div
+          key={`pane-${index}`}
+          className="split-panes__pane"
+          ref={(el) => {
+            paneRefs.current[index] = el
+          }}
+        >
           {pane}
         </div>,
         index < panes.length - 1 && (
@@ -116,14 +130,11 @@ export function SplitPanes({
             role="separator"
             aria-orientation="horizontal"
             aria-label={`Resize ${labels[index] ?? `pane ${index + 1}`} and ${labels[index + 1] ?? `pane ${index + 2}`}`}
-            aria-valuenow={Math.round((sizes[index] / total) * 100)}
-            aria-valuemin={0}
-            aria-valuemax={100}
             tabIndex={0}
-            title="Drag to resize · double-click to reset"
+            title="Drag to resize · double-click to fit the content"
             onPointerDown={onPointerDown(index)}
             onKeyDown={onKeyDown(index)}
-            onDoubleClick={() => update(defaultSizes)}
+            onDoubleClick={() => fit(index)}
           />
         )
       ])}
@@ -131,14 +142,29 @@ export function SplitPanes({
   )
 }
 
-function loadSizes(key: string | undefined, defaults: number[]): number[] {
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+/** Height the element needs for its content when it can't stretch. */
+function minContentHeight(el: HTMLElement | null | undefined): number {
+  if (!el) return 0
+  const previous = el.style.height
+  el.style.height = 'min-content'
+  const height = el.getBoundingClientRect().height
+  el.style.height = previous
+  return height
+}
+
+function loadSizes(key: string | undefined, count: number): PaneSize[] {
+  const defaults: PaneSize[] = new Array(count).fill('fit')
   if (!key) return defaults
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(key) ?? 'null')
     if (
       Array.isArray(saved) &&
-      saved.length === defaults.length &&
-      saved.every((n) => typeof n === 'number' && n > 0)
+      saved.length === count &&
+      saved.every((s) => s === 'fit' || (typeof s === 'number' && s > 0))
     ) {
       return saved
     }
@@ -148,7 +174,7 @@ function loadSizes(key: string | undefined, defaults: number[]): number[] {
   return defaults
 }
 
-function saveSizes(key: string | undefined, sizes: number[]): void {
+function saveSizes(key: string | undefined, sizes: PaneSize[]): void {
   if (!key) return
   try {
     localStorage.setItem(key, JSON.stringify(sizes))

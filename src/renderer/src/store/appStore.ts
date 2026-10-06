@@ -12,6 +12,7 @@ import {
   applyPreset,
   createPreset,
   DEFAULT_EXPORT_SETTINGS,
+  MAX_TRACK_LABEL_LENGTH,
   parsePreset,
   type ExportSettings,
   type PlayerSettings
@@ -35,6 +36,8 @@ interface AppState {
   selectedTrackId: number | null
   /** Mix settings, indexed by track id. */
   mixes: TrackMix[]
+  /** Custom track names, indexed by track id; '' keeps the name from the file. */
+  trackLabels: string[]
   engineStatus: EngineStatus
   transport: TransportStatus
   positionTick: number
@@ -59,6 +62,8 @@ interface AppState {
   seek(tick: number): void
   setTempoFactor(factor: number): void
   updateMix(trackId: number, change: Partial<TrackMix>): void
+  /** Renames a track; an empty name (or the file's own name) restores the file's name. */
+  renameTrack(trackId: number, label: string): void
   setExportSettings(change: Partial<ExportSettings>): void
   openExportDialog(): void
   closeExportDialog(): void
@@ -116,7 +121,8 @@ export const useAppStore = create<AppState>((set, get) => {
       mixes: settings.mixes,
       tempoFactor: settings.tempoFactor,
       selectedTrackId: settings.selectedTrackId,
-      exportSettings: settings.exportSettings
+      exportSettings: settings.exportSettings,
+      trackLabels: settings.trackLabels
     })
     engine?.setTempoFactor(settings.tempoFactor)
     void engine?.setChannels(currentChannelStates())
@@ -126,7 +132,8 @@ export const useAppStore = create<AppState>((set, get) => {
     mixes: song.tracks.map(defaultMix),
     tempoFactor: 1,
     selectedTrackId: song.tracks[0]?.id ?? null,
-    exportSettings: { ...DEFAULT_EXPORT_SETTINGS }
+    exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
+    trackLabels: song.tracks.map(() => '')
   })
 
   /** Follows the player position while playing and stops at the end of the song. */
@@ -155,6 +162,7 @@ export const useAppStore = create<AppState>((set, get) => {
     assignment: null,
     selectedTrackId: null,
     mixes: [],
+    trackLabels: [],
     engineStatus: 'idle',
     transport: 'stopped',
     positionTick: 0,
@@ -249,6 +257,16 @@ export const useAppStore = create<AppState>((set, get) => {
       engine?.setTempoFactor(clamped)
     },
 
+    renameTrack: (trackId, label) => {
+      const { song, trackLabels } = get()
+      const track = song?.tracks[trackId]
+      if (!track) return
+      const trimmed = label.trim().slice(0, MAX_TRACK_LABEL_LENGTH)
+      const next = trimmed === track.name ? '' : trimmed
+      if (next === trackLabels[trackId]) return
+      set({ trackLabels: trackLabels.map((l, id) => (id === trackId ? next : l)) })
+    },
+
     updateMix: (trackId, change) => {
       const mixes = get().mixes.map((mix, id) => (id === trackId ? { ...mix, ...change } : mix))
       set({ mixes })
@@ -270,7 +288,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const { song, assignment, file, mixes, selectedTrackId, tempoFactor, exportSettings } = get()
       if (!song || !assignment || !file || get().exportProgress !== null) return
 
-      const practice = selectedTrackId !== null ? song.tracks[selectedTrackId]?.name : undefined
+      const practice = trackDisplayName(get(), selectedTrackId)
       const suffix =
         exportSettings.mode === 'practice-solo'
           ? ` - ${practice}`
@@ -342,7 +360,8 @@ export const useAppStore = create<AppState>((set, get) => {
     resetSettings: () => {
       const { song } = get()
       if (!song) return
-      applySettings(defaultSettings(song))
+      // Custom track names are not part of the mix, so they stay.
+      applySettings({ ...defaultSettings(song), trackLabels: get().trackLabels })
       get().showNotice('Mix and tempo reset')
     },
 
@@ -369,7 +388,8 @@ useAppStore.subscribe((state, prev) => {
     state.mixes !== prev.mixes ||
     state.tempoFactor !== prev.tempoFactor ||
     state.selectedTrackId !== prev.selectedTrackId ||
-    state.exportSettings !== prev.exportSettings
+    state.exportSettings !== prev.exportSettings ||
+    state.trackLabels !== prev.trackLabels
   if (!changed) return
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(() => {
@@ -380,3 +400,9 @@ useAppStore.subscribe((state, prev) => {
       .catch((err) => console.warn('Auto-save failed:', err))
   }, AUTO_SAVE_DELAY_MS)
 })
+
+/** Name shown for a track: its custom name, or the name from the MIDI file. */
+export function trackDisplayName(state: Pick<AppState, 'song' | 'trackLabels'>, trackId: number | null): string {
+  if (trackId === null) return ''
+  return state.trackLabels[trackId] || state.song?.tracks[trackId]?.name || ''
+}

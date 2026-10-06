@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { EXPORT_BITRATES, type ExportMode } from '../presets/preset'
-import { useAppStore } from '../store/appStore'
+import { trackDisplayName, useAppStore } from '../store/appStore'
 
 const MODES: { value: ExportMode; label: string; hint: (part: string) => string }[] = [
   { value: 'mix', label: 'Current mix', hint: () => 'All tracks with your volume, pan, mute and solo settings.' },
@@ -18,7 +18,7 @@ export function ExportDialog(): React.JSX.Element | null {
   const progress = useAppStore((s) => s.exportProgress)
   const tempoFactor = useAppStore((s) => s.tempoFactor)
   const practice = useAppStore((s) =>
-    s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId]?.name : null
+    s.song && s.selectedTrackId !== null ? trackDisplayName(s, s.selectedTrackId) : null
   )
   const setExportSettings = useAppStore((s) => s.setExportSettings)
   const startExport = useAppStore((s) => s.startExport)

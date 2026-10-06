@@ -17,8 +17,14 @@ export const PRESET_VERSION = 1
 
 export interface PresetTrack extends TrackMix {
   index: number
+  /** The track's name in the MIDI file; used to match tracks when the preset is applied. */
   name: string
+  /** Custom name given in the player, if any. */
+  label?: string
 }
+
+/** Longest custom track name kept. */
+export const MAX_TRACK_LABEL_LENGTH = 60
 
 /** Saved player settings for a MIDI file. */
 export interface Preset {
@@ -36,6 +42,8 @@ export interface PlayerSettings {
   tempoFactor: number
   selectedTrackId: number | null
   exportSettings: ExportSettings
+  /** Custom track names, indexed by track id; '' keeps the name from the file. */
+  trackLabels: string[]
 }
 
 export function createPreset(
@@ -53,7 +61,8 @@ export function createPreset(
     tracks: song.tracks.map((track) => ({
       index: track.id,
       name: track.name,
-      ...settings.mixes[track.id]
+      ...settings.mixes[track.id],
+      ...(settings.trackLabels[track.id] ? { label: settings.trackLabels[track.id] } : {})
     })),
     export: { ...settings.exportSettings }
   }
@@ -113,7 +122,8 @@ export function applyPreset(song: Song, preset: Preset, defaults: TrackMix[]): P
     mixes,
     tempoFactor: preset.tempoFactor,
     selectedTrackId: selectedTrackId ?? song.tracks[0]?.id ?? null,
-    exportSettings: preset.export
+    exportSettings: preset.export,
+    trackLabels: song.tracks.map((track) => matched[track.id]?.label ?? '')
   }
 }
 
@@ -135,7 +145,10 @@ export function parsePreset(json: unknown): Preset {
       pan: integer(t.pan, -64, 63, 0),
       program: integer(t.program, 0, 127, 0),
       muted: t.muted === true,
-      solo: t.solo === true
+      solo: t.solo === true,
+      ...(typeof t.label === 'string' && t.label.trim()
+        ? { label: t.label.trim().slice(0, MAX_TRACK_LABEL_LENGTH) }
+        : {})
     }
   })
 

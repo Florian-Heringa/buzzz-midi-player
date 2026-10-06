@@ -1,4 +1,4 @@
-import { useAppStore } from '../store/appStore'
+import { trackDisplayName, useAppStore } from '../store/appStore'
 
 /** Title of the practice track plus one-click solo / mute for it. */
 export function PracticeHeader(): React.JSX.Element | null {
@@ -7,11 +7,12 @@ export function PracticeHeader(): React.JSX.Element | null {
   )
   const mix = useAppStore((s) => (s.selectedTrackId !== null ? s.mixes[s.selectedTrackId] : null))
   const updateMix = useAppStore((s) => s.updateMix)
+  const name = useAppStore((s) => trackDisplayName(s, s.selectedTrackId))
   if (!track || !mix) return null
 
   return (
     <div className="practice-header">
-      <h2 className="practice-header__title">{track.name}</h2>
+      <h2 className="practice-header__title">{name}</h2>
       <button
         aria-pressed={mix.solo}
         className={mix.solo ? 'button--active' : ''}

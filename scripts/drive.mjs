@@ -116,7 +116,7 @@ try {
     Math.abs(after[1] - (before[1] - 80)) <= 2 && Math.abs(after[2] - (before[2] + 80)) <= 2 && after[0] === before[0],
     `${before.join('/')} → ${after.join('/')}`
   )
-  const savedSizes = await page.evaluate(() => localStorage.getItem('pane-sizes'))
+  const savedSizes = await page.evaluate(() => localStorage.getItem('pane-layout'))
   check('pane sizes are remembered', savedSizes !== null)
   await page.locator('.split-panes__divider').nth(1).dblclick()
 
@@ -190,6 +190,58 @@ try {
 
   const cursor = await page.locator('.staff-view__svg').evaluate((el) => getComputedStyle(el).cursor)
   check('staff shows a pointer cursor', cursor === 'pointer', cursor)
+
+  // Pane layout: the staff pane fits its content and the mixer takes the rest.
+  const staffFit = () =>
+    page.evaluate(() => {
+      const pane = document.querySelectorAll('.split-panes__pane')[1]
+      const content = pane.firstElementChild.getBoundingClientRect().height
+      return { pane: Math.round(pane.getBoundingClientRect().height), content: Math.round(content) }
+    })
+  const fitted = await staffFit()
+  check('staff pane fits the staff', Math.abs(fitted.pane - fitted.content) <= 1, `pane ${fitted.pane}px, content ${fitted.content}px`)
+  const mixerFills = await page.evaluate(() => {
+    const panes = [...document.querySelectorAll('.split-panes__pane')]
+    const root = document.querySelector('.split-panes').getBoundingClientRect()
+    return Math.abs(panes[2].getBoundingClientRect().bottom - root.bottom) <= 1
+  })
+  check('mixer stretches to the bottom of the window', mixerFills)
+
+  // Selection: labels are not selectable; song details values are.
+  const selectionAfterDblclick = async (locator) => {
+    await page.evaluate(() => window.getSelection().removeAllRanges())
+    await locator.dblclick()
+    return page.evaluate(() => window.getSelection().toString().trim())
+  }
+  check('song detail labels are not selectable', (await selectionAfterDblclick(page.locator('.song-summary dt').first())) === '')
+  check('song detail values are selectable', (await selectionAfterDblclick(page.locator('.song-summary dd').nth(1))) !== '')
+  check('mixer text is not selectable', (await selectionAfterDblclick(page.locator('.strip__meta').first())) === '')
+  await setRange('.transport__tempo input', 60)
+  const tempoLabelSelection = await selectionAfterDblclick(page.locator('.transport__tempo .control-group__label'))
+  check(
+    'double-clicking the Tempo label resets the tempo',
+    tempoLabelSelection === '' && (await page.locator('.transport__tempo input').inputValue()) === '100'
+  )
+  const panKnob = page.locator('[role="slider"][aria-label="Alto pan"]')
+  await panKnob.focus()
+  await page.keyboard.press('ArrowLeft')
+  await page.locator('.knob__text', { hasText: 'Pan L' }).dblclick()
+  check('double-clicking a knob label resets the knob', (await panKnob.getAttribute('aria-valuenow')) === '0')
+
+  // Renaming a track: double-click the strip name.
+  await page.locator('.strip__name').first().dblclick()
+  await page.keyboard.type('Lead voice')
+  await page.keyboard.press('Enter')
+  check(
+    'double-click renames a track',
+    (await page.locator('.strip__name').first().innerText()) === 'Lead voice' &&
+      (await page.locator('.practice-header__title').innerText()) === 'Lead voice'
+  )
+  await page.locator('.strip__name').nth(1).dblclick()
+  await page.keyboard.type('Ignored')
+  await page.keyboard.press('Escape')
+  check('Escape cancels a rename', (await page.locator('.strip__name').nth(1).innerText()) === 'Alto')
+  await page.screenshot({ path: resolve(SHOT_DIR, 'fitted-layout.png') })
 
   await page.click('.transport__play')
   await page.waitForTimeout(500)
@@ -282,11 +334,19 @@ try {
   const presetDir = join(USER_DATA, 'presets')
   const autoFiles = existsSync(presetDir) ? readdirSync(presetDir) : []
   const autoSaved = autoFiles.length === 1 ? JSON.parse(readFileSync(join(presetDir, autoFiles[0]), 'utf8')) : null
-  check('changes are auto-saved', autoSaved?.tempoFactor === 0.75 && autoSaved.tracks[1].muted === true)
+  check(
+    'changes are auto-saved',
+    autoSaved?.tempoFactor === 0.75 && autoSaved.tracks[1].muted === true && autoSaved.tracks[0].label === 'Lead voice'
+  )
 
   await page.click('text=Open MIDI') // reopen the same file
   await page.waitForSelector('text=Restored your settings')
-  check('reopening restores tempo and mix', (await tempoValue()) === '75' && (await altoMuted()) === 'true')
+  check(
+    'reopening restores tempo, mix and track names',
+    (await tempoValue()) === '75' &&
+      (await altoMuted()) === 'true' &&
+      (await page.locator('.strip__name').first().innerText()) === 'Lead voice'
+  )
 
   const presetFile = join(USER_DATA, 'my preset.json')
   await app.evaluate(({ dialog }, path) => {
@@ -299,7 +359,12 @@ try {
 
   await clickMenu('Reset Mix and Tempo')
   await page.waitForTimeout(200)
-  check('reset restores defaults', (await tempoValue()) === '100' && (await altoMuted()) === 'false')
+  check(
+    'reset restores defaults but keeps track names',
+    (await tempoValue()) === '100' &&
+      (await altoMuted()) === 'false' &&
+      (await page.locator('.strip__name').first().innerText()) === 'Lead voice'
+  )
 
   await clickMenu('Load Preset…')
   await page.waitForSelector('text=Preset loaded')

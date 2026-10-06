@@ -95,8 +95,19 @@ select {
 
 /* ---- Layout: three resizable panes ---- */
 
+/*
+ * Like a desktop app, labels and UI text are not selectable (double-clicking a label acts on
+ * its control instead). Information worth copying opts back in.
+ */
 .app {
   height: 100%;
+  user-select: none;
+}
+
+.song-summary dd,
+.top-bar__file,
+.error {
+  user-select: text;
 }
 
 .app--dragging {
@@ -107,6 +118,8 @@ select {
 .split-panes {
   display: grid;
   height: 100%;
+  /* Only if the window is too short for every pane's minimum. */
+  overflow: auto;
 }
 
 .split-panes__pane {
@@ -131,7 +144,6 @@ select {
 .top-bar {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
   background: var(--panel);
 }
 
@@ -241,7 +253,6 @@ select {
 /* ---- Middle pane: staff ---- */
 
 .staff-pane {
-  min-height: 100%;
   padding: 12px 16px;
 }
 
