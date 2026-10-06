@@ -40,7 +40,11 @@ export function useMidiLoader(): {
   useEffect(
     () =>
       window.api.onMenuCommand((command) => {
+        const store = useAppStore.getState()
         if (command === 'open-midi') void openDialog()
+        else if (command === 'save-preset') void store.savePresetAs()
+        else if (command === 'load-preset') void store.loadPresetFromFile()
+        else if (command === 'reset-settings') store.resetSettings()
       }),
     [openDialog]
   )

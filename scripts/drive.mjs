@@ -6,14 +6,17 @@
 // audio output level, playhead movement, pause, tempo scaling and seeking.
 // The staff checks work for any file; the playback checks assume samples/satb-chorale.mid
 // (80 BPM, 25 s long).
+// The app runs with a fresh, temporary user data folder, so your own settings are untouched.
 import { _electron as electron } from 'playwright-core'
-import { mkdirSync } from 'fs'
-import { resolve } from 'path'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join, resolve } from 'path'
 
 const APP_DIR = resolve(import.meta.dirname, '..')
 const MIDI = resolve(APP_DIR, process.argv[2] ?? 'samples/satb-chorale.mid')
 const SHOT_DIR = resolve(process.env.SCREENSHOT_DIR ?? resolve(APP_DIR, 'out/shots'))
 mkdirSync(SHOT_DIR, { recursive: true })
+const USER_DATA = mkdtempSync(join(tmpdir(), 'midi-player-smoke-'))
 
 /** Runs in the page before the app: taps everything connected to the speakers. */
 function installOutputTap() {
@@ -41,7 +44,7 @@ const check = (name, ok, detail) => {
 
 const app = await electron.launch({
   executablePath: resolve(APP_DIR, 'node_modules/electron/dist/electron.exe'),
-  args: [APP_DIR],
+  args: [APP_DIR, `--user-data-dir=${USER_DATA}`],
   env: { ...process.env },
   timeout: 30_000
 })
@@ -155,16 +158,59 @@ try {
   await page.screenshot({ path: resolve(SHOT_DIR, 'mixer.png') })
 
   await page.click('.transport__play')
+  await page.waitForTimeout(200) // pause settles the final position asynchronously
   const pausedAt = await tick()
   await page.waitForTimeout(800)
   check('pause holds position', (await tick()) === pausedAt, `tick ${pausedAt}`)
   const silence = await level()
   check('pause silences output', silence < 0.01, `RMS ${silence.toFixed(4)}`)
 
+  // Presets: changes are auto-saved per file and restored when the file is reopened.
+  const clickMenu = (label) =>
+    app.evaluate(({ Menu }, text) => {
+      const item = Menu.getApplicationMenu()
+        .items.flatMap((menu) => menu.submenu?.items ?? [])
+        .find((i) => i.label === text)
+      item.click()
+    }, label)
+  const tempoValue = () => page.locator('.transport__tempo input').inputValue()
+  const altoMuted = () =>
+    page.locator('.mixer__toggle[title="Mute"]').nth(1).getAttribute('aria-pressed')
+
+  await setRange('.transport__tempo input', 75)
+  await page.locator('.mixer__toggle[title="Mute"]').nth(1).click() // mute Alto
+  await page.waitForTimeout(1000) // auto-save is debounced
+  const presetDir = join(USER_DATA, 'presets')
+  const autoFiles = existsSync(presetDir) ? readdirSync(presetDir) : []
+  const autoSaved = autoFiles.length === 1 ? JSON.parse(readFileSync(join(presetDir, autoFiles[0]), 'utf8')) : null
+  check('changes are auto-saved', autoSaved?.tempoFactor === 0.75 && autoSaved.tracks[1].muted === true)
+
+  await page.click('text=Open MIDI') // reopen the same file
+  await page.waitForSelector('text=Restored your settings')
+  check('reopening restores tempo and mix', (await tempoValue()) === '75' && (await altoMuted()) === 'true')
+
+  const presetFile = join(USER_DATA, 'my preset.json')
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: path })
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+  }, presetFile)
+  await clickMenu('Save Preset As…')
+  await page.waitForSelector('text=Preset saved')
+  check('preset saved to file', existsSync(presetFile))
+
+  await clickMenu('Reset Mix and Tempo')
+  await page.waitForTimeout(200)
+  check('reset restores defaults', (await tempoValue()) === '100' && (await altoMuted()) === 'false')
+
+  await clickMenu('Load Preset…')
+  await page.waitForSelector('text=Preset loaded')
+  check('loading a preset applies it', (await tempoValue()) === '75' && (await altoMuted()) === 'true')
+
   const uiErrors = await page.locator('.error').allInnerTexts()
   check('no error banner', uiErrors.length === 0, uiErrors.join('; '))
 } finally {
   check('no console errors', errors.length === 0, errors.join('\n  '))
   await app.close()
+  rmSync(USER_DATA, { recursive: true, force: true })
 }
 process.exit(results.every(Boolean) ? 0 : 1)

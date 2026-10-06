@@ -5,12 +5,24 @@ import { channelStates, defaultMix, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
 import { parseSong, type Song } from '../model/song'
+import {
+  applyPreset,
+  createPreset,
+  DEFAULT_EXPORT_SETTINGS,
+  parsePreset,
+  type ExportSettings,
+  type PlayerSettings
+} from '../presets/preset'
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'error'
 export type TransportStatus = 'stopped' | 'playing' | 'paused'
 
 export const MIN_TEMPO_FACTOR = 0.25
 export const MAX_TEMPO_FACTOR = 2
+/** Delay before changed settings are auto-saved for the open file. */
+const AUTO_SAVE_DELAY_MS = 500
+/** How long transient notices stay visible. */
+const NOTICE_MS = 3000
 
 interface AppState {
   file: LoadedMidiFile | null
@@ -25,7 +37,10 @@ interface AppState {
   positionTick: number
   /** Playback speed relative to the file's tempo (1 = original). */
   tempoFactor: number
+  exportSettings: ExportSettings
   error: string | null
+  /** Short-lived confirmation message, e.g. "Preset saved". */
+  notice: string | null
 
   loadFile(file: LoadedMidiFile): Promise<void>
   selectTrack(trackId: number): void
@@ -36,11 +51,17 @@ interface AppState {
   seek(tick: number): void
   setTempoFactor(factor: number): void
   updateMix(trackId: number, change: Partial<TrackMix>): void
+  setExportSettings(change: Partial<ExportSettings>): void
+  savePresetAs(): Promise<void>
+  loadPresetFromFile(): Promise<void>
+  resetSettings(): void
   setError(error: string | null): void
+  showNotice(notice: string): void
 }
 
 let engine: AudioEngine | null = null
 let enginePromise: Promise<AudioEngine> | null = null
+let noticeTimer: ReturnType<typeof setTimeout> | undefined
 
 export const useAppStore = create<AppState>((set, get) => {
   /** Creates the audio engine once, loading the SoundFont from the main process. */
@@ -69,6 +90,29 @@ export const useAppStore = create<AppState>((set, get) => {
     const { song, assignment, mixes } = get()
     return song && assignment ? channelStates(song, assignment, mixes) : []
   }
+
+  /**
+   * Replaces mix, tempo, practice track and export settings, and updates the engine.
+   * `extra` is merged into the same store update (so subscribers see one change).
+   */
+  const applySettings = (settings: PlayerSettings, extra: Partial<AppState> = {}): void => {
+    set({
+      ...extra,
+      mixes: settings.mixes,
+      tempoFactor: settings.tempoFactor,
+      selectedTrackId: settings.selectedTrackId,
+      exportSettings: settings.exportSettings
+    })
+    engine?.setTempoFactor(settings.tempoFactor)
+    void engine?.setChannels(currentChannelStates())
+  }
+
+  const defaultSettings = (song: Song): PlayerSettings => ({
+    mixes: song.tracks.map(defaultMix),
+    tempoFactor: 1,
+    selectedTrackId: song.tracks[0]?.id ?? null,
+    exportSettings: { ...DEFAULT_EXPORT_SETTINGS }
+  })
 
   /** Follows the player position while playing and stops at the end of the song. */
   const trackPosition = (): void => {
@@ -100,7 +144,9 @@ export const useAppStore = create<AppState>((set, get) => {
     transport: 'stopped',
     positionTick: 0,
     tempoFactor: 1,
+    exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     error: null,
+    notice: null,
 
     loadFile: async (file) => {
       let song: Song
@@ -114,16 +160,26 @@ export const useAppStore = create<AppState>((set, get) => {
 
       if (get().transport !== 'stopped') await get().stop()
       const assignment = assignChannels(song.tracks)
-      set({
+      let settings = defaultSettings(song)
+      let restored = false
+      try {
+        const saved = await window.api.readAutoPreset(file.hash)
+        if (saved) {
+          settings = applyPreset(song, parsePreset(saved), settings.mixes)
+          restored = true
+        }
+      } catch {
+        // An unreadable auto-saved preset is ignored; the file opens with defaults.
+      }
+      applySettings(settings, {
         file,
         song,
         assignment,
-        selectedTrackId: song.tracks[0].id,
-        mixes: song.tracks.map(defaultMix),
         transport: 'stopped',
         positionTick: 0,
         error: null
       })
+      if (restored) get().showNotice('Restored your settings for this file')
 
       try {
         const audio = await ensureEngine()
@@ -179,10 +235,71 @@ export const useAppStore = create<AppState>((set, get) => {
       void engine?.setChannels(currentChannelStates())
     },
 
-    setError: (error) => set({ error })
+    setExportSettings: (change) => set({ exportSettings: { ...get().exportSettings, ...change } }),
+
+    savePresetAs: async () => {
+      const { song, file } = get()
+      if (!song || !file) return
+      const preset = createPreset(song, get(), file)
+      const name = file.name.replace(/.midi?$/i, '') + ' preset.json'
+      try {
+        if (await window.api.savePresetDialog(preset, name)) get().showNotice('Preset saved')
+      } catch (err) {
+        set({ error: `Could not save preset: ${errorText(err)}` })
+      }
+    },
+
+    loadPresetFromFile: async () => {
+      const { song } = get()
+      if (!song) return
+      try {
+        const json = await window.api.openPresetDialog()
+        if (json === null) return
+        applySettings(applyPreset(song, parsePreset(json), song.tracks.map(defaultMix)))
+        get().showNotice('Preset loaded')
+      } catch (err) {
+        set({ error: `Could not load preset: ${errorText(err)}` })
+      }
+    },
+
+    resetSettings: () => {
+      const { song } = get()
+      if (!song) return
+      applySettings(defaultSettings(song))
+      get().showNotice('Mix and tempo reset')
+    },
+
+    setError: (error) => set({ error }),
+
+    showNotice: (notice) => {
+      clearTimeout(noticeTimer)
+      set({ notice })
+      noticeTimer = setTimeout(() => set({ notice: null }), NOTICE_MS)
+    }
   }
 })
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
+
+/** Auto-saves settings for the open file shortly after the user changes them. */
+let autoSaveTimer: ReturnType<typeof setTimeout> | undefined
+useAppStore.subscribe((state, prev) => {
+  // Opening a file applies its saved settings; that is not a change worth saving.
+  if (!state.file || !state.song || state.file !== prev.file) return
+  const changed =
+    state.mixes !== prev.mixes ||
+    state.tempoFactor !== prev.tempoFactor ||
+    state.selectedTrackId !== prev.selectedTrackId ||
+    state.exportSettings !== prev.exportSettings
+  if (!changed) return
+  clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(() => {
+    const { song, file } = useAppStore.getState()
+    if (!song || !file || file !== state.file) return
+    window.api
+      .writeAutoPreset(file.hash, createPreset(song, useAppStore.getState(), file))
+      .catch((err) => console.warn('Auto-save failed:', err))
+  }, AUTO_SAVE_DELAY_MS)
+})

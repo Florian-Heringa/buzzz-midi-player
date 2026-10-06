@@ -1,16 +1,31 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
-import { readFile } from 'fs/promises'
+import { createHash } from 'crypto'
+import { mkdir, readFile, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 import { IpcChannels, type LoadedMidiFile, type MenuCommand } from '../shared/api'
 
 const MIDI_FILTERS = [{ name: 'MIDI files', extensions: ['mid', 'midi'] }]
+const PRESET_FILTERS = [{ name: 'Player presets', extensions: ['json'] }]
 const SOUNDFONT_FILE = 'GeneralUser-GS.sf2'
+const SHA1_HEX = /^[0-9a-f]{40}$/
 
 let mainWindow: BrowserWindow | null = null
 
 async function loadMidiFile(path: string): Promise<LoadedMidiFile> {
   const buffer = await readFile(path)
-  return { name: basename(path), path, data: new Uint8Array(buffer) }
+  const hash = createHash('sha1').update(buffer).digest('hex')
+  return { name: basename(path), path, hash, data: new Uint8Array(buffer) }
+}
+
+/** Auto-saved presets live in the user data folder, one JSON file per MIDI file hash. */
+function autoPresetPath(hash: string): string {
+  // The hash becomes a file name, so only accept what loadMidiFile produces.
+  if (!SHA1_HEX.test(hash)) throw new Error('Invalid file hash')
+  return join(app.getPath('userData'), 'presets', `${hash}.json`)
+}
+
+async function readJson(path: string): Promise<unknown> {
+  return JSON.parse(await readFile(path, 'utf8'))
 }
 
 /** SoundFonts ship as extra resources when packaged and live in resources/ during development. */
@@ -32,6 +47,21 @@ function buildMenu(): void {
           label: 'Open MIDI…',
           accelerator: 'CmdOrCtrl+O',
           click: () => sendMenuCommand('open-midi')
+        },
+        { type: 'separator' },
+        {
+          label: 'Save Preset As…',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => sendMenuCommand('save-preset')
+        },
+        {
+          label: 'Load Preset…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => sendMenuCommand('load-preset')
+        },
+        {
+          label: 'Reset Mix and Tempo',
+          click: () => sendMenuCommand('reset-settings')
         },
         { type: 'separator' },
         { role: 'quit' }
@@ -57,6 +87,45 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IpcChannels.readMidiFile, (_event, path: string) => loadMidiFile(path))
+
+  ipcMain.handle(IpcChannels.readAutoPreset, async (_event, hash: string) => {
+    try {
+      return await readJson(autoPresetPath(hash))
+    } catch {
+      return null // none saved yet, or unreadable: start from defaults
+    }
+  })
+
+  ipcMain.handle(IpcChannels.writeAutoPreset, async (_event, hash: string, preset: unknown) => {
+    const path = autoPresetPath(hash)
+    await mkdir(join(path, '..'), { recursive: true })
+    await writeFile(path, JSON.stringify(preset, null, 2))
+  })
+
+  ipcMain.handle(IpcChannels.savePresetDialog, async (_event, preset: unknown, defaultName: string) => {
+    if (!mainWindow) return false
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName,
+      filters: PRESET_FILTERS
+    })
+    if (result.canceled || !result.filePath) return false
+    await writeFile(result.filePath, JSON.stringify(preset, null, 2))
+    return true
+  })
+
+  ipcMain.handle(IpcChannels.openPresetDialog, async () => {
+    if (!mainWindow) return null
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: PRESET_FILTERS
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    try {
+      return await readJson(result.filePaths[0])
+    } catch {
+      throw new Error(`${basename(result.filePaths[0])} is not a valid JSON file.`)
+    }
+  })
 
   ipcMain.handle(IpcChannels.loadSoundFont, async () => {
     const path = soundFontPath()

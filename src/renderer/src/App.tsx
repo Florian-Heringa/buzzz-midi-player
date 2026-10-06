@@ -13,6 +13,7 @@ export default function App(): React.JSX.Element {
     s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId] : null
   )
   const error = useAppStore((s) => s.error)
+  const notice = useAppStore((s) => s.notice)
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
 
@@ -36,6 +37,11 @@ export default function App(): React.JSX.Element {
       <header className="toolbar">
         <button onClick={() => void openDialog()}>Open MIDI…</button>
         <span className="toolbar__file">{song ? song.name : 'No file loaded'}</span>
+        {notice && (
+          <span className="toolbar__notice" role="status">
+            {notice}
+          </span>
+        )}
       </header>
 
       <TransportBar />
