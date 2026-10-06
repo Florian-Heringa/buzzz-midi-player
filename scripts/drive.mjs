@@ -382,7 +382,7 @@ try {
   await page.waitForFunction(
     () =>
       document.querySelector('.error') ||
-      document.querySelector('.top-bar__notice')?.textContent?.startsWith('Exported'),
+      document.querySelector('.last-export'),
     null,
     { timeout: 120_000 }
   )
@@ -407,6 +407,39 @@ try {
     decoded ? `${decoded.duration.toFixed(1)} s, rendered in ${renderSeconds.toFixed(1)} s` : 'no file'
   )
   check('MP3 export is not silent', (decoded?.rms ?? 0) > 0.005, `RMS ${decoded?.rms.toFixed(4)}`)
+
+  // The exported file is listed in the top bar; clicking it reveals the file in Explorer.
+  // shell is stubbed so no Explorer window opens during the test.
+  await app.evaluate(({ shell }) => {
+    globalThis.__revealed = []
+    shell.showItemInFolder = (path) => globalThis.__revealed.push(['item', path])
+    shell.openPath = async (path) => {
+      globalThis.__revealed.push(['folder', path])
+      return ''
+    }
+  })
+  const chip = page.locator('.last-export__open')
+  check('exported file is listed in the top bar', (await page.locator('.last-export__name').innerText()) === 'export.mp3')
+  await chip.click()
+  await page.waitForTimeout(200)
+  const revealed = await app.evaluate(() => globalThis.__revealed)
+  check(
+    'clicking it shows the file in its folder',
+    revealed.length === 1 && revealed[0][0] === 'item' && revealed[0][1] === mp3File,
+    JSON.stringify(revealed)
+  )
+  await page.screenshot({ path: resolve(SHOT_DIR, 'last-export.png') })
+  rmSync(mp3File)
+  await chip.click()
+  await page.waitForSelector('.error')
+  const afterDelete = await app.evaluate(() => globalThis.__revealed)
+  check(
+    'a deleted export opens its folder and says so',
+    afterDelete[1]?.[0] === 'folder' && afterDelete[1][1] === USER_DATA &&
+      (await page.locator('.error').innerText()).includes('moved or deleted')
+  )
+  await page.click('.last-export__dismiss')
+  check('the export entry can be dismissed', (await page.locator('.last-export').count()) === 0)
 
   // Cancelling mid-render leaves no file and no error.
   const cancelledFile = join(USER_DATA, 'cancelled.mp3')

@@ -47,6 +47,8 @@ interface AppState {
   exportDialogOpen: boolean
   /** Export render progress 0–1, or null when no export is running. */
   exportProgress: number | null
+  /** The most recently exported file, shown until dismissed or replaced by the next export. */
+  lastExport: { path: string; name: string } | null
   /** Loop range chosen in the UI. Not yet applied to playback. */
   loop: LoopRange
   error: string | null
@@ -69,6 +71,9 @@ interface AppState {
   closeExportDialog(): void
   startExport(): Promise<void>
   cancelExport(): void
+  /** Opens the file explorer at the last exported file. */
+  showLastExport(): Promise<void>
+  dismissLastExport(): void
   /** Updates the loop range, keeping start ≤ end within the song's bars. */
   setLoop(change: Partial<LoopRange>): void
   savePresetAs(): Promise<void>
@@ -170,6 +175,7 @@ export const useAppStore = create<AppState>((set, get) => {
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     exportDialogOpen: false,
     exportProgress: null,
+    lastExport: null,
     loop: { enabled: false, startBar: 1, endBar: 1 },
     error: null,
     notice: null,
@@ -311,7 +317,9 @@ export const useAppStore = create<AppState>((set, get) => {
         })
         if (result) {
           set({ exportDialogOpen: false })
-          get().showNotice(`Exported ${result.path.split(/[\\/]/).pop()}`)
+          const name = result.path.split(/[\\/]/).pop() ?? result.path
+          // The top bar lists the file (instead of a transient notice) so it can be opened later.
+          set({ lastExport: { path: result.path, name } })
         }
       } catch (err) {
         if (!exportCancelled) set({ error: `Export failed: ${errorText(err)}` })
@@ -325,6 +333,19 @@ export const useAppStore = create<AppState>((set, get) => {
       const { song, loop } = get()
       if (song) set({ loop: updateLoop(loop, change, measureCount(song)) })
     },
+
+    showLastExport: async () => {
+      const { lastExport } = get()
+      if (!lastExport) return
+      try {
+        const found = await window.api.showExportInFolder(lastExport.path)
+        if (!found) set({ error: `${lastExport.name} was moved or deleted; opened its folder instead.` })
+      } catch (err) {
+        set({ error: `Could not open the folder: ${errorText(err)}` })
+      }
+    },
+
+    dismissLastExport: () => set({ lastExport: null }),
 
     cancelExport: () => {
       if (get().exportProgress === null) return

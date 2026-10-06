@@ -20,11 +20,14 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
           </button>
           <span className="top-bar__file">{song ? song.name : 'No file loaded'}</span>
           <SongSummary />
-          {notice && (
-            <span className="top-bar__notice" role="status">
-              {notice}
-            </span>
-          )}
+          <div className="top-bar__end">
+            {notice && (
+              <span className="top-bar__notice" role="status">
+                {notice}
+              </span>
+            )}
+            <LastExport />
+          </div>
         </div>
         {error && (
           <div className="error" role="alert">
@@ -42,6 +45,38 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
         </div>
       )}
     </div>
+  )
+}
+
+/** The last exported MP3: click to show it in the file explorer. */
+function LastExport(): React.JSX.Element | null {
+  const lastExport = useAppStore((s) => s.lastExport)
+  const showLastExport = useAppStore((s) => s.showLastExport)
+  const dismiss = useAppStore((s) => s.dismissLastExport)
+  if (!lastExport) return null
+
+  return (
+    <span className="last-export">
+      <button
+        className="last-export__open"
+        onClick={() => void showLastExport()}
+        title={`Show in folder: ${lastExport.path}`}
+      >
+        <span className="last-export__icon" aria-hidden>
+          ♪
+        </span>
+        <span className="last-export__name">{lastExport.name}</span>
+        <span className="last-export__action">Show in folder</span>
+      </button>
+      <button
+        className="last-export__dismiss"
+        onClick={dismiss}
+        aria-label={`Dismiss ${lastExport.name}`}
+        title="Dismiss"
+      >
+        ×
+      </button>
+    </span>
   )
 }
 

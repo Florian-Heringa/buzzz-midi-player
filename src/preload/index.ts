@@ -14,6 +14,7 @@ const api: ElectronApi = {
   openPresetDialog: () => ipcRenderer.invoke(IpcChannels.openPresetDialog),
   exportMp3: (request) => ipcRenderer.invoke(IpcChannels.exportMp3, request),
   cancelExport: () => ipcRenderer.invoke(IpcChannels.cancelExport),
+  showExportInFolder: (path) => ipcRenderer.invoke(IpcChannels.showExportInFolder, path),
   onExportProgress: (listener) => subscribe(IpcChannels.exportProgress, listener),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   onMenuCommand: (listener) => subscribe<MenuCommand>(IpcChannels.menuCommand, listener)

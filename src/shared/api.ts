@@ -54,6 +54,11 @@ export interface ElectronApi {
   exportMp3(request: ExportRequest): Promise<ExportResult | null>
   /** Stops a running export. */
   cancelExport(): Promise<void>
+  /**
+   * Opens the file explorer with an exported file selected. Resolves to false (after opening
+   * its folder) when the file no longer exists.
+   */
+  showExportInFolder(path: string): Promise<boolean>
   /** Subscribes to export progress (0–1). Returns an unsubscribe function. */
   onExportProgress(listener: (fraction: number) => void): () => void
   /** Resolves the filesystem path of a File dropped onto the window. */
@@ -75,5 +80,6 @@ export const IpcChannels = {
   exportMp3: 'export:mp3',
   cancelExport: 'export:cancel',
   exportProgress: 'export:progress',
+  showExportInFolder: 'export:show-in-folder',
   menuCommand: 'menu:command'
 } as const

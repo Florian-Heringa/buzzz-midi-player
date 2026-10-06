@@ -1,4 +1,6 @@
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { existsSync } from 'fs'
+import { dirname } from 'path'
 import type { Worker } from 'worker_threads'
 import { IpcChannels, type ExportRequest, type ExportResult } from '../../shared/api'
 import createExportWorker from './exportWorker?nodeWorker'
@@ -8,6 +10,8 @@ const MP3_FILTERS = [{ name: 'MP3 audio', extensions: ['mp3'] }]
 const EXPORT_SAMPLE_RATE = 44_100
 
 let running: { worker: Worker; cancel: () => void } | null = null
+/** Files written by exports; the renderer may only reveal these in Explorer. */
+const exportedPaths = new Set<string>()
 
 /**
  * MP3 export: asks for a destination, then renders and writes the file in a worker thread
@@ -57,6 +61,7 @@ export function registerExportHandlers(
             event.sender.send(IpcChannels.exportProgress, message.fraction)
           } else if (message.type === 'done') {
             finish()
+            exportedPaths.add(outPath)
             resolve({ path: outPath, seconds: message.seconds })
           } else {
             finish()
@@ -72,4 +77,16 @@ export function registerExportHandlers(
   )
 
   ipcMain.handle(IpcChannels.cancelExport, () => running?.cancel())
+
+  // Opens Explorer with the exported file selected; if it was moved or deleted since, opens
+  // its folder instead and reports that the file is gone.
+  ipcMain.handle(IpcChannels.showExportInFolder, async (_event, path: string): Promise<boolean> => {
+    if (!exportedPaths.has(path)) throw new Error('Not an exported file')
+    if (existsSync(path)) {
+      shell.showItemInFolder(path)
+      return true
+    }
+    await shell.openPath(dirname(path))
+    return false
+  })
 }
