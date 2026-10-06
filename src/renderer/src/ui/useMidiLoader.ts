@@ -1,0 +1,49 @@
+import { useCallback, useEffect } from 'react'
+import type { LoadedMidiFile } from '@shared/api'
+import { useAppStore } from '../store/appStore'
+
+const MIDI_EXTENSION = /\.midi?$/i
+
+/** Wires the menu, open dialog and drag-and-drop to the app store. */
+export function useMidiLoader(): {
+  openDialog: () => Promise<void>
+  loadDroppedFile: (file: File) => Promise<void>
+} {
+  const setFile = useAppStore((s) => s.setFile)
+  const setError = useAppStore((s) => s.setError)
+
+  const load = useCallback(
+    async (loader: () => Promise<LoadedMidiFile | null>) => {
+      try {
+        const file = await loader()
+        if (file) setFile(file)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+    },
+    [setFile, setError]
+  )
+
+  const openDialog = useCallback(() => load(() => window.api.openMidiDialog()), [load])
+
+  const loadDroppedFile = useCallback(
+    async (file: File) => {
+      if (!MIDI_EXTENSION.test(file.name)) {
+        setError(`"${file.name}" is not a MIDI file.`)
+        return
+      }
+      await load(() => window.api.readMidiFile(window.api.getPathForFile(file)))
+    },
+    [load, setError]
+  )
+
+  useEffect(
+    () =>
+      window.api.onMenuCommand((command) => {
+        if (command === 'open-midi') void openDialog()
+      }),
+    [openDialog]
+  )
+
+  return { openDialog, loadDroppedFile }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "electron-midi-player",
+  "version": "0.1.0",
+  "description": "Electron MIDI player for practicing vocal parts",
+  "main": "./out/main/index.js",
+  "author": "Florian Heringa",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "build:win": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "@tonejs/midi": "^2.0.28",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^7.3.7",
+    "vitest": "^5.0.3"
+  }
+}
