@@ -9,7 +9,21 @@ export default tseslint.config(
   {
     files: ['scripts/**/*.mjs'],
     languageOptions: {
-      globals: { Buffer: 'readonly', console: 'readonly', process: 'readonly' }
+      globals: { Buffer: 'readonly', console: 'readonly', process: 'readonly', fetch: 'readonly' }
+    }
+  },
+  {
+    // Functions in the smoke test run inside the app page.
+    files: ['scripts/drive.mjs'],
+    languageOptions: {
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        AudioNode: 'readonly',
+        AudioDestinationNode: 'readonly',
+        HTMLInputElement: 'readonly',
+        Event: 'readonly'
+      }
     }
   },
   {

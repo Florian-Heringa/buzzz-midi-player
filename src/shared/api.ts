@@ -14,6 +14,8 @@ export interface ElectronApi {
   openMidiDialog(): Promise<LoadedMidiFile | null>
   /** Reads a MIDI file from a known path (e.g. after drag-and-drop). */
   readMidiFile(path: string): Promise<LoadedMidiFile>
+  /** Reads the bundled General MIDI SoundFont. */
+  loadSoundFont(): Promise<Uint8Array>
   /** Resolves the filesystem path of a File dropped onto the window. */
   getPathForFile(file: File): string
   /** Subscribes to application menu commands. Returns an unsubscribe function. */
@@ -23,5 +25,6 @@ export interface ElectronApi {
 export const IpcChannels = {
   openMidiDialog: 'midi:open-dialog',
   readMidiFile: 'midi:read-file',
+  loadSoundFont: 'soundfont:load',
   menuCommand: 'menu:command'
 } as const

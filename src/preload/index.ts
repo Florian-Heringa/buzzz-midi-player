@@ -4,6 +4,7 @@ import { IpcChannels, type ElectronApi, type MenuCommand } from '../shared/api'
 const api: ElectronApi = {
   openMidiDialog: () => ipcRenderer.invoke(IpcChannels.openMidiDialog),
   readMidiFile: (path) => ipcRenderer.invoke(IpcChannels.readMidiFile, path),
+  loadSoundFont: () => ipcRenderer.invoke(IpcChannels.loadSoundFont),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   onMenuCommand: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, command: MenuCommand): void =>

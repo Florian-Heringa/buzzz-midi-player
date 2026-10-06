@@ -4,12 +4,19 @@ import { basename, join } from 'path'
 import { IpcChannels, type LoadedMidiFile, type MenuCommand } from '../shared/api'
 
 const MIDI_FILTERS = [{ name: 'MIDI files', extensions: ['mid', 'midi'] }]
+const SOUNDFONT_FILE = 'GeneralUser-GS.sf2'
 
 let mainWindow: BrowserWindow | null = null
 
 async function loadMidiFile(path: string): Promise<LoadedMidiFile> {
   const buffer = await readFile(path)
   return { name: basename(path), path, data: new Uint8Array(buffer) }
+}
+
+/** SoundFonts ship as extra resources when packaged and live in resources/ during development. */
+function soundFontPath(): string {
+  const base = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+  return join(base, 'soundfonts', SOUNDFONT_FILE)
 }
 
 function sendMenuCommand(command: MenuCommand): void {
@@ -50,6 +57,15 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IpcChannels.readMidiFile, (_event, path: string) => loadMidiFile(path))
+
+  ipcMain.handle(IpcChannels.loadSoundFont, async () => {
+    const path = soundFontPath()
+    try {
+      return new Uint8Array(await readFile(path))
+    } catch {
+      throw new Error(`SoundFont not found at ${path}. Run "npm run fetch-soundfont".`)
+    }
+  })
 }
 
 function createWindow(): void {

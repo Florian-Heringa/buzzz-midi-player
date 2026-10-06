@@ -4,3 +4,4 @@ dist
 *.log
 
 /_example_midi_files
+resources/soundfonts/*.sf2

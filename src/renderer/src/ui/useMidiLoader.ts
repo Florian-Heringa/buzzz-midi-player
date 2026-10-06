@@ -16,7 +16,7 @@ export function useMidiLoader(): {
     async (loader: () => Promise<LoadedMidiFile | null>) => {
       try {
         const file = await loader()
-        if (file) loadFile(file)
+        if (file) await loadFile(file)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }

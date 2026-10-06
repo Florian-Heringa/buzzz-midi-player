@@ -2,6 +2,7 @@ import { useState, type DragEvent } from 'react'
 import { useAppStore } from './store/appStore'
 import { SongInfo } from './ui/SongInfo'
 import { TrackList } from './ui/TrackList'
+import { TransportBar } from './ui/TransportBar'
 import { useMidiLoader } from './ui/useMidiLoader'
 
 export default function App(): React.JSX.Element {
@@ -34,6 +35,8 @@ export default function App(): React.JSX.Element {
         <button onClick={() => void openDialog()}>Open MIDI…</button>
         <span className="toolbar__file">{song ? song.name : 'No file loaded'}</span>
       </header>
+
+      <TransportBar />
 
       {error && <div className="error">{error}</div>}
 
