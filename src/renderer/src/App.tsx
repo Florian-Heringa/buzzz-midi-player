@@ -1,4 +1,5 @@
 import { useState, type DragEvent } from 'react'
+import { StaffView } from './notation/StaffView'
 import { useAppStore } from './store/appStore'
 import { PracticeHeader } from './ui/PracticeHeader'
 import { SongInfo } from './ui/SongInfo'
@@ -8,6 +9,9 @@ import { useMidiLoader } from './ui/useMidiLoader'
 
 export default function App(): React.JSX.Element {
   const song = useAppStore((s) => s.song)
+  const selectedTrack = useAppStore((s) =>
+    s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId] : null
+  )
   const error = useAppStore((s) => s.error)
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
@@ -46,7 +50,12 @@ export default function App(): React.JSX.Element {
           </aside>
           <main className="content">
             <PracticeHeader />
-            <p className="placeholder">The staff for this track will appear here.</p>
+            {selectedTrack &&
+              (selectedTrack.isDrum ? (
+                <p className="placeholder">Drum tracks are not shown on a staff.</p>
+              ) : (
+                <StaffView song={song} track={selectedTrack} />
+              ))}
           </main>
         </div>
       ) : (

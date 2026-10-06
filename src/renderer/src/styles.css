@@ -304,3 +304,96 @@ button:hover {
 input[type='range'] {
   accent-color: var(--accent);
 }
+
+:root {
+  --staff-line: #8a8a90;
+  --note: #2b2b30;
+  --note-duration: color-mix(in srgb, var(--accent) 22%, transparent);
+  --note-sounding: var(--accent);
+  --playhead: #e5484d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --staff-line: #6c6c74;
+    --note: #e6e6ea;
+  }
+}
+
+.staff-view {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.staff-view__scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.staff-view__svg {
+  display: block;
+  cursor: text;
+}
+
+.staff-view__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.staff-view__header-bg {
+  fill: var(--panel);
+}
+
+.staff__lines line,
+.staff__ledger {
+  stroke: var(--staff-line);
+  stroke-width: 1;
+}
+
+.staff__barline {
+  stroke: var(--staff-line);
+  stroke-width: 1.2;
+}
+
+.staff__barline--final {
+  stroke-width: 3;
+}
+
+.staff__measure-number {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.staff__notehead {
+  fill: var(--note);
+}
+
+.staff__notehead--sounding {
+  fill: var(--note-sounding);
+}
+
+.staff__duration {
+  fill: var(--note-duration);
+}
+
+.staff__accidental {
+  fill: var(--note);
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-family: 'Segoe UI Symbol', 'Noto Music', serif;
+}
+
+.staff__clef,
+.staff__clef-octave {
+  fill: var(--note);
+  font-family: 'Segoe UI Symbol', 'Noto Music', serif;
+}
+
+.staff__playhead {
+  stroke: var(--playhead);
+  stroke-width: 2;
+}

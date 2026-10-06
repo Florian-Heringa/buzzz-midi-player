@@ -4,6 +4,8 @@
 // ELECTRON_RENDERER_URL to its URL (main and preload still come from the last build).
 // Opens the MIDI file through File > Open (the dialog is stubbed), then checks playback:
 // audio output level, playhead movement, pause, tempo scaling and seeking.
+// The staff checks work for any file; the playback checks assume samples/satb-chorale.mid
+// (80 BPM, 25 s long).
 import { _electron as electron } from 'playwright-core'
 import { mkdirSync } from 'fs'
 import { resolve } from 'path'
@@ -80,6 +82,17 @@ try {
     return (await tick()) - start
   }
 
+  // Staff: one notehead per note for each track, screenshot per track.
+  const names = await page.locator('.track-list__name').allInnerTexts()
+  for (let i = 0; i < names.length; i++) {
+    await page.locator('.track-list__name').nth(i).click()
+    const expected = Number((await page.locator('.track-list__meta').nth(i).innerText()).match(/(\d+) notes/)?.[1])
+    const heads = await page.locator('.staff-view__svg .staff__notehead:not(.staff__notehead--sounding)').count()
+    check(`staff shows every ${names[i]} note`, heads === expected, `${heads}/${expected}`)
+    await page.locator('.staff-view').screenshot({ path: resolve(SHOT_DIR, `staff-${names[i]}.png`) })
+  }
+  await page.locator('.track-list__name').first().click()
+
   await page.click('.transport__play')
   await page.waitForTimeout(500)
   const levels = []
@@ -94,6 +107,14 @@ try {
   // Sample at 80 BPM, 480 ppq → 640 ticks per second.
   check('playhead advances at file tempo', Math.abs(normalRate - 640) < 100, `${normalRate} ticks/s`)
   await page.screenshot({ path: resolve(SHOT_DIR, 'playing.png') })
+
+  const scrollLeft = () => page.locator('.staff-view__scroller').evaluate((el) => el.scrollLeft)
+  const scrollBefore = await scrollLeft()
+  await page.waitForTimeout(1000)
+  const scrollAfter = await scrollLeft()
+  check('staff follows the playhead', scrollAfter > scrollBefore, `scrollLeft ${scrollBefore} → ${scrollAfter}`)
+  check('a sounding note is highlighted', (await page.locator('.staff__notehead--sounding').count()) > 0)
+  await page.screenshot({ path: resolve(SHOT_DIR, 'staff-playing.png') })
 
   await setRange('.transport__tempo input', 50)
   await page.waitForTimeout(200)
