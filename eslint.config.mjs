@@ -25,7 +25,8 @@ export default tseslint.config(
         Event: 'readonly',
         AudioContext: 'readonly',
         localStorage: 'readonly',
-        atob: 'readonly'
+        atob: 'readonly',
+        getComputedStyle: 'readonly'
       }
     }
   },

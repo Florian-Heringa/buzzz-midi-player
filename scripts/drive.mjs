@@ -120,17 +120,76 @@ try {
   check('pane sizes are remembered', savedSizes !== null)
   await page.locator('.split-panes__divider').nth(1).dblclick()
 
-  // Loop controls (playback does not loop yet): range stays valid.
+  // Loop controls (playback does not loop yet): typing is free; the range is checked on blur.
   const loopStart = page.locator('input[aria-label="Loop start bar"]')
   const loopEnd = page.locator('input[aria-label="Loop end bar"]')
   check('loop range defaults to the whole song', (await loopStart.inputValue()) === '1' && (await loopEnd.inputValue()) === '8')
-  await loopStart.fill('3')
-  await loopEnd.fill('6')
-  await loopStart.fill('7')
-  check('loop end follows a later start', (await loopStart.inputValue()) === '7' && (await loopEnd.inputValue()) === '7')
+  await loopEnd.click()
+  await page.keyboard.type('12') // out of range: must not be corrected while typing
+  const typed = await loopEnd.inputValue()
+  await page.keyboard.press('Tab')
+  check('typing is not corrected mid-entry', typed === '12', `typed "${typed}"`)
+  check('loop bar is validated when leaving the field', (await loopEnd.inputValue()) === '8')
+  await loopStart.click()
+  await page.keyboard.type('7')
+  await page.keyboard.press('Enter')
+  await loopEnd.click()
+  await page.keyboard.type('6')
+  await page.keyboard.press('Tab')
+  check('loop start follows an earlier end', (await loopStart.inputValue()) === '6' && (await loopEnd.inputValue()) === '6')
+  await loopStart.click()
+  await page.keyboard.type('3')
+  await page.keyboard.press('Tab')
+
+  // Stop returns to the loop start (bar 3 = tick 3840) only while the loop is on.
   await page.click('text=⟲ Loop')
   check('loop toggle', (await page.locator('text=⟲ Loop').getAttribute('aria-pressed')) === 'true')
+  await setRange('.transport__position', 6000)
+  await page.click('button[aria-label="Stop"]')
+  check('stop returns to the loop start', (await page.locator('.transport__position').inputValue()) === '3840')
   await page.click('text=⟲ Loop')
+  await page.click('button[aria-label="Stop"]')
+  check('stop returns to the song start without loop', (await page.locator('.transport__position').inputValue()) === '0')
+
+  // Knobs: keyboard and vertical drag.
+  const volumeKnob = page.locator('[role="slider"][aria-label="Soprano volume"]')
+  await volumeKnob.focus()
+  await page.keyboard.press('ArrowDown')
+  check('volume knob responds to the keyboard', (await volumeKnob.getAttribute('aria-valuenow')) === '99')
+  const knobBox = await volumeKnob.boundingBox()
+  await page.mouse.move(knobBox.x + knobBox.width / 2, knobBox.y + knobBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(knobBox.x + knobBox.width / 2, knobBox.y + knobBox.height / 2 - 40, { steps: 4 })
+  await page.mouse.up()
+  const dragged = Number(await volumeKnob.getAttribute('aria-valuenow'))
+  check('dragging a knob up raises it', dragged > 120, `value ${dragged}`)
+  await volumeKnob.dblclick()
+  check('double-click resets a knob', (await volumeKnob.getAttribute('aria-valuenow')) === '100')
+
+  // Mixer pane can't be squeezed below its content.
+  const mixerDivider = page.locator('.split-panes__divider').nth(1)
+  const mixerBox = await mixerDivider.boundingBox()
+  await page.mouse.move(mixerBox.x + 200, mixerBox.y + 3)
+  await page.mouse.down()
+  await page.mouse.move(mixerBox.x + 200, mixerBox.y + 600, { steps: 6 })
+  await page.mouse.up()
+  await page.waitForTimeout(100)
+  const fit = await page.evaluate(() => {
+    const pane = document.querySelectorAll('.split-panes__pane')[2]
+    const toggles = [...pane.querySelectorAll('.strip__toggles')]
+    const paneBox = pane.getBoundingClientRect()
+    return {
+      pane: Math.round(paneBox.height),
+      content: pane.scrollHeight,
+      visible: toggles.every((t) => t.getBoundingClientRect().bottom <= paneBox.bottom + 1)
+    }
+  })
+  check('mixer pane never cuts off strip content', fit.visible && fit.pane >= fit.content - 1, `pane ${fit.pane}px, content ${fit.content}px`)
+  await page.screenshot({ path: resolve(SHOT_DIR, 'mixer-minimum.png') })
+  await mixerDivider.dblclick()
+
+  const cursor = await page.locator('.staff-view__svg').evaluate((el) => getComputedStyle(el).cursor)
+  check('staff shows a pointer cursor', cursor === 'pointer', cursor)
 
   await page.click('.transport__play')
   await page.waitForTimeout(500)
@@ -152,6 +211,10 @@ try {
   await page.waitForTimeout(1000)
   const scrollAfter = await scrollLeft()
   check('staff follows the playhead', scrollAfter > scrollBefore, `scrollLeft ${scrollBefore} → ${scrollAfter}`)
+  const meterHeights = await page
+    .locator('.strip__meter-fill')
+    .evaluateAll((fills) => fills.map((f) => f.getBoundingClientRect().height))
+  check('level meters move while playing', meterHeights.some((h) => h > 5), meterHeights.map(Math.round).join('/'))
   check('a sounding note is highlighted', (await page.locator('.staff__notehead--sounding').count()) > 0)
   await page.screenshot({ path: resolve(SHOT_DIR, 'staff-playing.png') })
 

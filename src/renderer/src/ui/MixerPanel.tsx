@@ -1,9 +1,30 @@
 import { memo } from 'react'
-import type { TrackMix } from '../audio/mixer'
+import { DEFAULT_VOLUME, effectiveVolume, type TrackMix } from '../audio/mixer'
 import { GM_FAMILIES, GM_PROGRAM_NAMES, midiNoteName } from '../model/gm'
+import { isSounding } from '../model/sounding'
 import { noteRange, type Track } from '../model/song'
 import { useAppStore } from '../store/appStore'
 import { panLabel } from './format'
+import { Knob } from './Knob'
+
+const volumeText = (volume: number): string => `Vol ${Math.round((volume / 127) * 100)}%`
+const panText = (pan: number): string => `Pan ${panLabel(pan)}`
+
+/**
+ * Activity meter: the track's audible volume while one of its notes is sounding.
+ * Subscribes to the playhead itself so the rest of the strip doesn't re-render every frame.
+ */
+function LevelMeter({ track, level }: { track: Track; level: number }): React.JSX.Element {
+  const active = useAppStore(
+    (s) => s.transport === 'playing' && isSounding(track, s.positionTick)
+  )
+  const shown = active ? level : 0
+  return (
+    <div className="strip__meter" role="meter" aria-label={`${track.name} level`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(shown * 100)}>
+      <div className="strip__meter-fill" style={{ height: `${shown * 100}%` }} />
+    </div>
+  )
+}
 
 /** Bottom pane: one vertical channel strip per track. */
 export function MixerPanel(): React.JSX.Element {
@@ -84,32 +105,29 @@ function ChannelStrip({
         <InstrumentSelect value={mix.program} onChange={(program) => update({ program })} />
       )}
 
-      <label className="strip__pan">
-        <span className="strip__label">Pan {panLabel(mix.pan)}</span>
-        <input
-          type="range"
+      <div className="strip__knobs">
+        <Knob
+          label={`${track.name} pan`}
+          value={mix.pan}
           min={-64}
           max={63}
-          value={mix.pan}
-          onChange={(e) => update({ pan: Number(e.target.value) })}
-          onDoubleClick={() => update({ pan: 0 })}
-          title="Double-click to center"
-          aria-label={`${track.name} pan`}
+          defaultValue={0}
+          bipolar
+          format={panText}
+          onChange={(pan) => update({ pan })}
         />
-      </label>
-
-      <div className="strip__fader">
-        <input
-          type="range"
+        <Knob
+          label={`${track.name} volume`}
+          value={mix.volume}
           min={0}
           max={127}
-          value={mix.volume}
-          onChange={(e) => update({ volume: Number(e.target.value) })}
-          aria-label={`${track.name} volume`}
-          aria-orientation="vertical"
+          defaultValue={DEFAULT_VOLUME}
+          format={volumeText}
+          onChange={(volume) => update({ volume })}
         />
       </div>
-      <span className="strip__value">{Math.round((mix.volume / 127) * 100)}%</span>
+
+      <LevelMeter track={track} level={effectiveVolume(mix, anySolo) / 127} />
 
       <div className="strip__toggles">
         <button

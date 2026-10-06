@@ -1,3 +1,6 @@
+import { measureStarts } from './measures'
+import type { Song } from './song'
+
 /** Loop range in bars (1-based, inclusive). */
 export interface LoopRange {
   enabled: boolean
@@ -18,4 +21,10 @@ export function updateLoop(loop: LoopRange, change: Partial<LoopRange>, barCount
     else endBar = startBar
   }
   return { enabled: change.enabled ?? loop.enabled, startBar, endBar }
+}
+
+/** Where Stop returns to: the start of the loop when looping is on, otherwise the song start. */
+export function stopPosition(song: Song, loop: LoopRange): number {
+  if (!loop.enabled) return 0
+  return measureStarts(song)[loop.startBar - 1] ?? 0
 }

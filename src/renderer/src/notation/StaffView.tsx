@@ -34,11 +34,29 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
     [layout]
   )
 
+  /** Staff x of the pointer, clamped to the start of the music. */
+  const pointerX = (event: MouseEvent<SVGSVGElement>): number =>
+    Math.max(layout.originX, event.clientX - event.currentTarget.getBoundingClientRect().left)
+
   const onClick = (event: MouseEvent<SVGSVGElement>): void => {
-    const x = event.clientX - event.currentTarget.getBoundingClientRect().left
-    seek(Math.max(0, (x - layout.originX) / layout.pxPerTick))
+    seek((pointerX(event) - layout.originX) / layout.pxPerTick)
   }
 
+  // Ghost playhead showing where a click will seek; updated directly to avoid re-renders.
+  const hoverLine = useRef<SVGLineElement>(null)
+  const onMouseMove = (event: MouseEvent<SVGSVGElement>): void => {
+    const line = hoverLine.current
+    if (!line) return
+    const x = String(pointerX(event))
+    line.setAttribute('x1', x)
+    line.setAttribute('x2', x)
+    line.style.visibility = 'visible'
+  }
+  const onMouseLeave = (): void => {
+    if (hoverLine.current) hoverLine.current.style.visibility = 'hidden'
+  }
+
+  const { staves, lineGap } = layout
   return (
     <div className="staff-view">
       <div className="staff-view__scroller" ref={scroller}>
@@ -47,10 +65,19 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
           width={layout.width}
           height={layout.height}
           onClick={onClick}
+          onMouseMove={onMouseMove}
+          onMouseLeave={onMouseLeave}
           role="img"
-          aria-label={`Staff for ${track.name}`}
+          aria-label={`Staff for ${track.name}. Click to move the playhead.`}
         >
           <StaticStaff layout={layout} />
+          <line
+            ref={hoverLine}
+            className="staff__hover-line"
+            y1={staves[0].top - lineGap * 2}
+            y2={staves[staves.length - 1].bottom + lineGap * 2}
+            style={{ visibility: 'hidden' }}
+          />
           <PlaybackOverlay layout={layout} />
         </svg>
       </div>

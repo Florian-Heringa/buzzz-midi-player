@@ -39,6 +39,8 @@ export default function App(): React.JSX.Element {
       <SplitPanes
         defaultSizes={DEFAULT_PANE_SIZES}
         storageKey="pane-sizes"
+        // Controls and mixer never get smaller than their content, so no text is cut off.
+        minSizes={['content', 'default', 'content']}
         labels={['controls', 'staff', 'mixer']}
       >
         <TopBar onOpen={() => void openDialog()} />

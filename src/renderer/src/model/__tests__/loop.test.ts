@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { updateLoop, type LoopRange } from '../loop'
+import { parseSong } from '../song'
+import { stopPosition, updateLoop, type LoopRange } from '../loop'
+import { buildMidi, note } from './midiBuilder'
 
 const loop: LoopRange = { enabled: false, startBar: 3, endBar: 6 }
 
@@ -17,5 +19,18 @@ describe('updateLoop', () => {
   it('drags the other end along when the range would invert', () => {
     expect(updateLoop(loop, { startBar: 7 }, 8)).toMatchObject({ startBar: 7, endBar: 7 })
     expect(updateLoop(loop, { endBar: 2 }, 8)).toMatchObject({ startBar: 2, endBar: 2 })
+  })
+})
+
+describe('stopPosition', () => {
+  // Four bars of 4/4 at 480 ppq.
+  const song = parseSong(buildMidi([note(0, 60, 4 * 1920)]), 'x.mid')
+
+  it('returns to the song start when looping is off', () => {
+    expect(stopPosition(song, { enabled: false, startBar: 3, endBar: 4 })).toBe(0)
+  })
+
+  it('returns to the first beat of the loop start bar when looping is on', () => {
+    expect(stopPosition(song, { enabled: true, startBar: 3, endBar: 4 })).toBe(2 * 1920)
   })
 })

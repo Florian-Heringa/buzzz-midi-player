@@ -5,7 +5,7 @@ import { buildExportMidi } from '../audio/exportMix'
 import { channelStates, defaultMix, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
-import { updateLoop, type LoopRange } from '../model/loop'
+import { stopPosition, updateLoop, type LoopRange } from '../model/loop'
 import { measureCount } from '../model/measures'
 import { parseSong, type Song } from '../model/song'
 import {
@@ -230,7 +230,8 @@ export const useAppStore = create<AppState>((set, get) => {
     togglePlay: () => (get().transport === 'playing' ? get().pause() : get().play()),
 
     stop: async () => {
-      set({ transport: 'stopped', positionTick: 0 })
+      const { song, loop } = get()
+      set({ transport: 'stopped', positionTick: song ? stopPosition(song, loop) : 0 })
       if (engine?.isPlaying) await engine.pause()
     },
 

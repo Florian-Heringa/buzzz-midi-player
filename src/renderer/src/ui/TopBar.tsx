@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type KeyboardEvent } from 'react'
 import { measureCount } from '../model/measures'
 import { MAX_TEMPO_FACTOR, MIN_TEMPO_FACTOR, useAppStore } from '../store/appStore'
 import { formatTime, keyName } from './format'
@@ -12,32 +12,34 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
 
   return (
     <div className="top-bar">
-      <div className="top-bar__row">
-        <button onClick={onOpen}>Open MIDI…</button>
-        <button onClick={openExportDialog} disabled={!song}>
-          Export MP3…
-        </button>
-        <span className="top-bar__file">{song ? song.name : 'No file loaded'}</span>
-        <SongSummary />
-        {notice && (
-          <span className="top-bar__notice" role="status">
-            {notice}
-          </span>
-        )}
-      </div>
-      {error && (
-        <div className="error" role="alert">
-          {error}
+      <header className="top-bar__header">
+        <div className="top-bar__row">
+          <button onClick={onOpen}>Open MIDI…</button>
+          <button onClick={openExportDialog} disabled={!song}>
+            Export MP3…
+          </button>
+          <span className="top-bar__file">{song ? song.name : 'No file loaded'}</span>
+          <SongSummary />
+          {notice && (
+            <span className="top-bar__notice" role="status">
+              {notice}
+            </span>
+          )}
         </div>
-      )}
+        {error && (
+          <div className="error" role="alert">
+            {error}
+          </div>
+        )}
+      </header>
       {song && (
-        <>
+        <div className="top-bar__playback" role="group" aria-label="Playback">
           <TransportRow />
           <div className="top-bar__row">
             <TempoControl />
             <LoopControls />
           </div>
-        </>
+        </div>
       )}
     </div>
   )
@@ -78,10 +80,11 @@ function TransportRow(): React.JSX.Element | null {
   const togglePlay = useAppStore((s) => s.togglePlay)
   const stop = useAppStore((s) => s.stop)
   const seek = useAppStore((s) => s.seek)
+  const loopEnabled = useAppStore((s) => s.loop.enabled)
 
   // Space toggles playback unless a text field has focus.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
+    const onKey = (event: globalThis.KeyboardEvent): void => {
       const target = event.target as HTMLElement
       if (event.code !== 'Space' || target.matches('input[type="text"], input[type="number"], textarea, select')) {
         return
@@ -109,7 +112,7 @@ function TransportRow(): React.JSX.Element | null {
       >
         {playing ? '❚❚' : '▶'}
       </button>
-      <button onClick={() => void stop()} aria-label="Stop" title="Stop and return to start">
+      <button onClick={() => void stop()} aria-label="Stop" title={loopEnabled ? "Stop and return to the loop start" : "Stop and return to start"}>
         ■
       </button>
       <span className="transport__time">
@@ -178,26 +181,73 @@ function LoopControls(): React.JSX.Element | null {
       </button>
       <label className="loop-controls__bar">
         <span className="control-group__label">Bars</span>
-        <input
-          type="number"
-          min={1}
-          max={bars}
+        <BarInput
           value={loop.startBar}
-          onChange={(e) => setLoop({ startBar: Number(e.target.value) })}
-          aria-label="Loop start bar"
+          bars={bars}
+          label="Loop start bar"
+          onCommit={(startBar) => setLoop({ startBar })}
         />
       </label>
       <label className="loop-controls__bar">
         <span className="control-group__label">to</span>
-        <input
-          type="number"
-          min={1}
-          max={bars}
+        <BarInput
           value={loop.endBar}
-          onChange={(e) => setLoop({ endBar: Number(e.target.value) })}
-          aria-label="Loop end bar"
+          bars={bars}
+          label="Loop end bar"
+          onCommit={(endBar) => setLoop({ endBar })}
         />
       </label>
     </div>
+  )
+}
+
+/**
+ * Bar number field. Typing is free-form; the value is validated (by the store) only when
+ * focus leaves the field or Enter is pressed. Escape cancels; ↑/↓ step immediately.
+ */
+function BarInput({
+  value,
+  bars,
+  label,
+  onCommit
+}: {
+  value: number
+  bars: number
+  label: string
+  onCommit: (bar: number) => void
+}): React.JSX.Element {
+  // While editing, the typed text; null when showing the committed value.
+  const [draft, setDraft] = useState<string | null>(null)
+
+  const commit = (): void => {
+    if (draft !== null && draft.trim() !== '') onCommit(Number(draft))
+    setDraft(null)
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'Enter') {
+      commit()
+    } else if (event.key === 'Escape') {
+      setDraft(null)
+      event.currentTarget.blur()
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      onCommit(value + (event.key === 'ArrowUp' ? 1 : -1))
+      setDraft(null)
+    }
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={draft ?? String(value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ''))}
+      onBlur={commit}
+      onKeyDown={onKeyDown}
+      aria-label={label}
+      title={`Bar 1–${bars}`}
+    />
   )
 }

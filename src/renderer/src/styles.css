@@ -74,7 +74,7 @@ input[type='range'] {
   accent-color: var(--accent);
 }
 
-input[type='number'],
+input[type='text'],
 select {
   font: inherit;
   padding: 2px 4px;
@@ -131,10 +131,22 @@ select {
 .top-bar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   min-height: 100%;
-  padding: 8px 12px;
   background: var(--panel);
+}
+
+/* File actions and song details, set apart from the playback controls below. */
+.top-bar__header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.top-bar__playback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
 }
 
 .top-bar__row {
@@ -222,7 +234,8 @@ select {
 }
 
 .loop-controls__bar input {
-  width: 56px;
+  width: 48px;
+  text-align: center;
 }
 
 /* ---- Middle pane: staff ---- */
@@ -252,12 +265,16 @@ select {
 
 /* ---- Bottom pane: mixer ---- */
 
-/* Strips take the pane's height; the fader absorbs any extra. */
+/*
+ * Strips fill the pane's height and the level meter absorbs any extra. Every other element
+ * keeps its natural height (no shrinking), and the panel is never shorter than its content,
+ * so a small pane scrolls instead of cutting text off.
+ */
 .mixer-panel {
   display: flex;
   gap: 8px;
   height: 100%;
-  min-height: 250px;
+  min-height: fit-content;
   padding: 8px 12px;
   overflow-x: auto;
   background: var(--panel);
@@ -282,6 +299,10 @@ select {
   background: var(--bg);
 }
 
+.strip > * {
+  flex-shrink: 0;
+}
+
 .strip--selected {
   border-top-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
@@ -291,6 +312,7 @@ select {
   padding: 2px 4px;
   overflow: hidden;
   font-weight: 600;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -301,7 +323,7 @@ select {
 
 .strip--silenced .strip__name,
 .strip--silenced .strip__meta,
-.strip--silenced .strip__fader {
+.strip--silenced .strip__meter {
   opacity: 0.5;
 }
 
@@ -309,7 +331,7 @@ select {
   color: var(--muted);
   font-size: 0.72rem;
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -322,51 +344,93 @@ select {
 .strip__instrument {
   width: 100%;
   font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .strip__drums {
   color: var(--muted);
   font-size: 0.8rem;
+  line-height: 1.4;
   text-align: center;
 }
 
-.strip__pan {
+.strip__knobs {
+  display: flex;
+  justify-content: space-around;
+}
+
+.strip .strip__meter {
+  flex: 1 0 40px;
+  position: relative;
+  width: 14px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel);
+}
+
+.strip__meter-fill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(to top, #2fb26b, #9bd34a 70%, #f0c23b);
+  transition: height 80ms linear;
+}
+
+/* ---- Knob ---- */
+
+.knob {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
 }
 
-.strip__label {
+.knob__dial {
+  display: flex;
+  border-radius: 50%;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.knob__dial:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.knob__track,
+.knob__value {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.knob__track {
+  stroke: var(--border);
+}
+
+.knob__value {
+  stroke: var(--accent);
+}
+
+.knob__cap {
+  fill: var(--panel);
+  stroke: var(--border);
+}
+
+.knob__pointer {
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.knob__text {
   color: var(--muted);
-  font-size: 0.75rem;
-  text-align: center;
-}
-
-.strip__pan input {
-  width: 100%;
-}
-
-.strip__fader {
-  position: relative;
-  flex: 1 1 0;
-  min-height: 60px;
-}
-
-/* Vertical fader filling the space left in the strip: up is louder. */
-.strip__fader input {
-  position: absolute;
-  inset: 0;
-  width: 24px;
-  height: 100%;
-  margin: 0 auto;
-  writing-mode: vertical-lr;
-  direction: rtl;
-}
-
-.strip__value {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  line-height: 1.3;
 }
 
 .strip__toggles {
@@ -408,9 +472,18 @@ select {
   overflow-y: hidden;
 }
 
+/* Clicking the staff moves the playhead; a ghost line previews where. */
 .staff-view__svg {
   display: block;
-  cursor: text;
+  cursor: pointer;
+}
+
+.staff__hover-line {
+  stroke: var(--playhead);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .staff-view__header {

@@ -9,6 +9,8 @@ interface SplitPanesProps {
   defaultSizes: number[]
   /** Smallest height a pane can be dragged to. */
   minPanePx?: number
+  /** Per pane: never smaller than its content ('content') or the default minimum. */
+  minSizes?: ('content' | 'default')[]
   /** localStorage key to remember sizes per viewer. */
   storageKey?: string
   /** Accessible names of the panes, used to label the dividers. */
@@ -20,6 +22,7 @@ interface SplitPanesProps {
 export function SplitPanes({
   defaultSizes,
   minPanePx = 48,
+  minSizes = [],
   storageKey,
   labels = [],
   children
@@ -31,6 +34,20 @@ export function SplitPanes({
   const update = (next: number[]): void => {
     setSizes(next)
     saveSizes(storageKey, next)
+  }
+
+  /**
+   * Content minimums are enforced by the grid, so the requested fractions can disagree with
+   * what is shown. Re-reading the rendered heights keeps further drags from having a dead zone.
+   */
+  const syncToRendered = (): void => {
+    const heights = [...(container.current?.children ?? [])]
+      .filter((el) => el.classList.contains('split-panes__pane'))
+      .map((el) => el.getBoundingClientRect().height)
+    if (heights.length === panes.length && heights.every((h) => h > 0)) {
+      const total = heights.reduce((a, b) => a + b, 0)
+      update(heights.map((h) => h / total))
+    }
   }
 
   /** Height available to panes, excluding dividers. */
@@ -63,6 +80,7 @@ export function SplitPanes({
     }
     const onUp = (): void => {
       saveSizes(storageKey, latest)
+      requestAnimationFrame(syncToRendered)
       divider.removeEventListener('pointermove', onMove)
       divider.removeEventListener('pointerup', onUp)
       divider.removeEventListener('pointercancel', onUp)
@@ -77,11 +95,12 @@ export function SplitPanes({
     if (!delta) return
     event.preventDefault()
     update(moveDivider(sizes, index, delta))
+    requestAnimationFrame(syncToRendered)
   }
 
   const total = sizes.reduce((a, b) => a + b, 0)
   const rows = sizes
-    .map((size) => `minmax(${minPanePx}px, ${size}fr)`)
+    .map((size, i) => `minmax(${minSizes[i] === 'content' ? 'min-content' : `${minPanePx}px`}, ${size}fr)`)
     .join(` ${DIVIDER_PX}px `)
 
   return (
