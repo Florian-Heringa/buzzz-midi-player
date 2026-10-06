@@ -9,19 +9,19 @@ export function useMidiLoader(): {
   openDialog: () => Promise<void>
   loadDroppedFile: (file: File) => Promise<void>
 } {
-  const setFile = useAppStore((s) => s.setFile)
+  const loadFile = useAppStore((s) => s.loadFile)
   const setError = useAppStore((s) => s.setError)
 
   const load = useCallback(
     async (loader: () => Promise<LoadedMidiFile | null>) => {
       try {
         const file = await loader()
-        if (file) setFile(file)
+        if (file) loadFile(file)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
     },
-    [setFile, setError]
+    [loadFile, setError]
   )
 
   const openDialog = useCallback(() => load(() => window.api.openMidiDialog()), [load])

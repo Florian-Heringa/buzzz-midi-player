@@ -2,3 +2,5 @@ node_modules
 out
 dist
 *.log
+
+/_example_midi_files

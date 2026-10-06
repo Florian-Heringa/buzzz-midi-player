@@ -1,9 +1,14 @@
 import { useState, type DragEvent } from 'react'
 import { useAppStore } from './store/appStore'
+import { SongInfo } from './ui/SongInfo'
+import { TrackList } from './ui/TrackList'
 import { useMidiLoader } from './ui/useMidiLoader'
 
 export default function App(): React.JSX.Element {
-  const file = useAppStore((s) => s.file)
+  const song = useAppStore((s) => s.song)
+  const selectedTrack = useAppStore((s) =>
+    s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId] : null
+  )
   const error = useAppStore((s) => s.error)
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
@@ -27,18 +32,27 @@ export default function App(): React.JSX.Element {
     >
       <header className="toolbar">
         <button onClick={() => void openDialog()}>Open MIDI…</button>
-        <span className="toolbar__file">{file ? file.name : 'No file loaded'}</span>
+        <span className="toolbar__file">{song ? song.name : 'No file loaded'}</span>
       </header>
 
-      <main className="content">
-        {error && <div className="error">{error}</div>}
-        {!file && <p className="placeholder">Open a MIDI file or drop one here.</p>}
-        {file && (
-          <p className="placeholder">
-            Loaded {file.name} ({file.data.byteLength.toLocaleString()} bytes)
-          </p>
-        )}
-      </main>
+      {error && <div className="error">{error}</div>}
+
+      {song ? (
+        <div className="workspace">
+          <aside className="sidebar">
+            <SongInfo />
+            <TrackList />
+          </aside>
+          <main className="content">
+            {selectedTrack && <h2 className="content__title">{selectedTrack.name}</h2>}
+            <p className="placeholder">The staff for this track will appear here.</p>
+          </main>
+        </div>
+      ) : (
+        <main className="content content--empty">
+          <p className="placeholder">Open a MIDI file or drop one here.</p>
+        </main>
+      )}
     </div>
   )
 }
