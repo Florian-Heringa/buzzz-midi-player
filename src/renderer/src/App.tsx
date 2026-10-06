@@ -1,5 +1,6 @@
 import { useState, type DragEvent } from 'react'
 import { useAppStore } from './store/appStore'
+import { PracticeHeader } from './ui/PracticeHeader'
 import { SongInfo } from './ui/SongInfo'
 import { TrackList } from './ui/TrackList'
 import { TransportBar } from './ui/TransportBar'
@@ -7,9 +8,6 @@ import { useMidiLoader } from './ui/useMidiLoader'
 
 export default function App(): React.JSX.Element {
   const song = useAppStore((s) => s.song)
-  const selectedTrack = useAppStore((s) =>
-    s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId] : null
-  )
   const error = useAppStore((s) => s.error)
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
@@ -47,7 +45,7 @@ export default function App(): React.JSX.Element {
             <TrackList />
           </aside>
           <main className="content">
-            {selectedTrack && <h2 className="content__title">{selectedTrack.name}</h2>}
+            <PracticeHeader />
             <p className="placeholder">The staff for this track will appear here.</p>
           </main>
         </div>

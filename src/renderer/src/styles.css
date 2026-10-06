@@ -79,7 +79,7 @@ button:hover {
 }
 
 .sidebar {
-  width: 280px;
+  width: 320px;
   flex-shrink: 0;
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -99,9 +99,22 @@ button:hover {
   justify-content: center;
 }
 
-.content__title {
-  margin: 0 0 12px;
+.practice-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.practice-header__title {
+  margin: 0 8px 0 0;
   font-size: 1.2rem;
+}
+
+.button--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .song-info {
@@ -146,8 +159,92 @@ button:hover {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+.track-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .track-list__name {
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-list__item--silenced .track-list__name,
+.track-list__item--silenced .track-list__meta {
+  opacity: 0.5;
+}
+
+.mixer {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  cursor: default;
+}
+
+.mixer__row {
+  display: grid;
+  grid-template-columns: 28px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.mixer__row input {
+  width: 100%;
+}
+
+.mixer__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mixer__instrument,
+.mixer__drums {
+  margin-top: 2px;
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.mixer__instrument {
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.mixer__drums {
+  color: var(--muted);
+}
+
+.mixer__toggles {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mixer__toggle {
+  width: 26px;
+  padding: 1px 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.mixer__toggle--mute {
+  background: #e0a030;
+  border-color: #e0a030;
+  color: #fff;
+}
+
+.mixer__toggle--solo {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .track-list__meta {

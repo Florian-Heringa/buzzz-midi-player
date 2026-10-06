@@ -106,6 +106,33 @@ try {
   const afterSeek = await tick()
   check('seek jumps and keeps playing', afterSeek > 7680 && afterSeek < 7680 + 800, `tick ${afterSeek}`)
 
+  // Mixer: mute every track, then seek back. The player replays volume events on seek, so
+  // this also checks that the worklet hook keeps the muted values.
+  const muteButtons = page.locator('.mixer__toggle[title="Mute"]')
+  const trackCount = await muteButtons.count()
+  for (let i = 0; i < trackCount; i++) await muteButtons.nth(i).click()
+  await page.waitForTimeout(1500) // let release tails and reverb fade
+  const mutedLevel = await level()
+  check('muting all tracks silences output', mutedLevel < 0.003, `RMS ${mutedLevel.toFixed(4)}`)
+  await setRange('.transport__position', 0)
+  await page.waitForTimeout(1000)
+  const mutedAfterSeek = await level()
+  check('mute survives a seek', mutedAfterSeek < 0.003, `RMS ${mutedAfterSeek.toFixed(4)}`)
+  for (let i = 0; i < trackCount; i++) await muteButtons.nth(i).click()
+
+  await page.click('text=Solo part')
+  await page.waitForTimeout(800)
+  const silencedRows = await page.locator('.track-list__item--silenced').count()
+  check('solo part silences the other tracks', silencedRows === trackCount - 1, `${silencedRows} silenced`)
+  const soloLevel = await level()
+  check('soloed part is audible', soloLevel > 0.001, `RMS ${soloLevel.toFixed(4)}`)
+  await page.click('text=Solo part')
+
+  await page.locator('.mixer__instrument').first().selectOption('73') // Flute
+  await page.waitForTimeout(500)
+  check('instrument change keeps playing', (await level()) > 0.001)
+  await page.screenshot({ path: resolve(SHOT_DIR, 'mixer.png') })
+
   await page.click('.transport__play')
   const pausedAt = await tick()
   await page.waitForTimeout(800)
