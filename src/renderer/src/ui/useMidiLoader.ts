@@ -7,6 +7,7 @@ const MIDI_EXTENSION = /\.midi?$/i
 /** Wires the menu, open dialog, drag-and-drop and Explorer file opening to the app store. */
 export function useMidiLoader(): {
   openDialog: () => Promise<void>
+  openRecent: (path: string) => Promise<void>
   loadDroppedFile: (file: File) => Promise<void>
 } {
   const loadFile = useAppStore((s) => s.loadFile)
@@ -25,6 +26,10 @@ export function useMidiLoader(): {
   )
 
   const openDialog = useCallback(() => load(() => window.api.openMidiDialog()), [load])
+  const openRecent = useCallback(
+    (path: string) => load(() => window.api.openRecentFile(path)),
+    [load]
+  )
 
   const loadDroppedFile = useCallback(
     async (file: File) => {
@@ -58,5 +63,5 @@ export function useMidiLoader(): {
     [openDialog]
   )
 
-  return { openDialog, loadDroppedFile }
+  return { openDialog, openRecent, loadDroppedFile }
 }

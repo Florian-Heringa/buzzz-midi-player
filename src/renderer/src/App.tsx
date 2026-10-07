@@ -8,6 +8,7 @@ import { PracticeHeader } from './ui/PracticeHeader'
 import { SettingsDialog } from './ui/SettingsDialog'
 import { useSettings } from './ui/settings'
 import { SplitPanes } from './ui/SplitPanes'
+import { StartScreen } from './ui/StartScreen'
 import { trackHueStyle } from './ui/theme'
 import { Toasts } from './ui/Toasts'
 import { TopBar } from './ui/TopBar'
@@ -21,7 +22,7 @@ export default function App(): React.JSX.Element {
   const { noteDisplay } = useSettings()
   // The song as the user reads its key (sharps or flats, major or minor).
   const keyedSong = useAppStore(interpretedSong)
-  const { openDialog, loadDroppedFile } = useMidiLoader()
+  const { openDialog, openRecent, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
 
   const onDrop = (event: DragEvent): void => {
@@ -65,7 +66,7 @@ export default function App(): React.JSX.Element {
                 ))}
             </>
           ) : (
-            <p className="placeholder staff-pane__empty">Open a MIDI file or drop one here.</p>
+            <StartScreen onOpen={() => void openDialog()} onOpenRecent={(path) => void openRecent(path)} />
           )}
         </main>
 

@@ -908,6 +908,79 @@ try {
   const keySigGlyphs = await page.locator('.staff-view__header .staff__accidental').count()
   check('the staff shows the estimated key signature', keySigGlyphs === 3, `${keySigGlyphs} accidentals`)
 
+  // Recent files: a copy that is opened and then deleted shows up as "not found".
+  const doomedFile = join(USER_DATA, 'doomed.mid')
+  writeFileSync(doomedFile, readFileSync(MIDI))
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+  }, doomedFile)
+  await page.click('text=Open MIDI')
+  await page.waitForFunction(() => document.querySelector('.top-bar__file')?.textContent === 'doomed.mid')
+  rmSync(doomedFile)
+
+  // With no file open (after a reload) the start screen lists recent files, newest first.
+  await page.reload()
+  await page.waitForSelector('.start-screen__recent')
+  const recentNames = await page.locator('.start-screen__name').allInnerTexts()
+  check(
+    'the start screen lists recent files, newest first',
+    JSON.stringify(recentNames) === JSON.stringify(['doomed.mid', 'quirky.mid', 'satb-chorale.mid']),
+    recentNames.join(', ')
+  )
+  check(
+    'a moved or deleted file is marked and cannot be opened',
+    (await page.locator('.start-screen__missing .start-screen__when').innerText()) === 'not found' &&
+      (await page.locator('.start-screen__missing .start-screen__file').isDisabled())
+  )
+  const menuRecent = await app.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()
+      .items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((item) => item.label === 'Open Recent')
+      .submenu.items.map((item) => item.label)
+  )
+  check(
+    'File > Open Recent lists the same files',
+    menuRecent[0].startsWith('1. doomed.mid') && menuRecent[1] === '2. quirky.mid' && menuRecent.includes('Clear Recently Opened'),
+    menuRecent.slice(0, 3).join(' | ')
+  )
+  const blocked = await page.evaluate(() =>
+    window.api.openRecentFile('C:/Windows/win.ini').then(
+      () => false,
+      () => true
+    )
+  )
+  check('only files on the recent list can be opened through it', blocked)
+
+  await page.locator('.start-screen__file', { hasText: 'satb-chorale.mid' }).click()
+  await page.waitForFunction(() => document.querySelector('.top-bar__file')?.textContent === 'satb-chorale.mid')
+  check('clicking a recent file opens it', (await page.locator('.strip').count()) === 5)
+
+  // Opening from the menu.
+  await app.evaluate(({ Menu }) => {
+    const recentMenu = Menu.getApplicationMenu()
+      .items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((item) => item.label === 'Open Recent')
+    recentMenu.submenu.items.find((item) => item.label.endsWith('quirky.mid')).click()
+  })
+  await page.waitForFunction(() => document.querySelector('.top-bar__file')?.textContent === 'quirky.mid')
+  check('File > Open Recent opens the file', true)
+
+  await page.reload()
+  await page.waitForSelector('.start-screen__recent')
+  await page.locator('.start-screen__remove[aria-label="Remove doomed.mid from recent files"]').click()
+  await page.waitForFunction(() => ![...document.querySelectorAll('.start-screen__name')].some((n) => n.textContent === 'doomed.mid'))
+  check('a file can be removed from the list', (await page.locator('.start-screen__name').count()) === 2)
+  await page.screenshot({ path: resolve(SHOT_DIR, 'start-screen.png') })
+  await page.click('.start-screen__clear')
+  await page.waitForFunction(() => !document.querySelector('.start-screen__recent'))
+  const menuAfterClear = await app.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()
+      .items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((item) => item.label === 'Open Recent')
+      .submenu.items[0].label
+  )
+  check('clearing empties the start screen and the menu', menuAfterClear === 'No recent files')
+
   const uiErrors = await page.locator('.error').allInnerTexts()
   check('no error banner', uiErrors.length === 0, uiErrors.join('; '))
 } finally {

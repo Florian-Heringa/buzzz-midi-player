@@ -24,6 +24,17 @@ export interface ExportResult {
   seconds: number
 }
 
+/** A recently opened MIDI file, as listed on the start screen and in File > Open Recent. */
+export interface RecentFile {
+  path: string
+  name: string
+  folder: string
+  /** When it was last opened (ms since epoch). */
+  openedAt: number
+  /** False when the file has been moved or deleted since. */
+  exists: boolean
+}
+
 /** Commands sent from the application menu to the renderer. */
 export type MenuCommand =
   | 'open-midi'
@@ -41,6 +52,14 @@ export interface ElectronApi {
   readMidiFile(path: string): Promise<LoadedMidiFile>
   /** The MIDI file the app was launched with (e.g. from Explorer); returns it only once. */
   takeLaunchFile(): Promise<LoadedMidiFile | null>
+  /** Recently opened files, newest first. */
+  getRecentFiles(): Promise<RecentFile[]>
+  /** Opens a file from the recent list (only paths on the list are allowed). */
+  openRecentFile(path: string): Promise<LoadedMidiFile>
+  removeRecentFile(path: string): Promise<void>
+  clearRecentFiles(): Promise<void>
+  /** Subscribes to changes of the recent list. Returns an unsubscribe function. */
+  onRecentFilesChanged(listener: (files: RecentFile[]) => void): () => void
   /** Subscribes to MIDI files opened from Explorer while the app is running. */
   onOpenFile(listener: (file: LoadedMidiFile) => void): () => void
   /** Reads the bundled General MIDI SoundFont. */
@@ -80,6 +99,11 @@ export const IpcChannels = {
   readMidiFile: 'midi:read-file',
   takeLaunchFile: 'midi:take-launch-file',
   openFile: 'midi:open-file',
+  getRecentFiles: 'recent:get',
+  openRecentFile: 'recent:open',
+  removeRecentFile: 'recent:remove',
+  clearRecentFiles: 'recent:clear',
+  recentFilesChanged: 'recent:changed',
   loadSoundFont: 'soundfont:load',
   readAutoPreset: 'preset:read-auto',
   writeAutoPreset: 'preset:write-auto',

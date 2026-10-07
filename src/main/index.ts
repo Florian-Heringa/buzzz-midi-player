@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 import { IpcChannels, type LoadedMidiFile, type MenuCommand } from '../shared/api'
 import { registerExportHandlers } from './export/exportHandler'
+import { describeRecent, RecentFilesStore } from './recentFiles'
 
 const MIDI_FILTERS = [{ name: 'MIDI files', extensions: ['mid', 'midi'] }]
 const PRESET_FILTERS = [{ name: 'Player presets', extensions: ['json'] }]
@@ -12,11 +13,76 @@ const SOUNDFONT_FILE = 'GeneralUser-GS.sf2'
 const SHA1_HEX = /^[0-9a-f]{40}$/
 
 let mainWindow: BrowserWindow | null = null
+/** Recently opened MIDI files; created once the app is ready (it needs the user data path). */
+let recent: RecentFilesStore | null = null
 
+/** Reads a MIDI file and remembers it as recently opened (every way of opening goes here). */
 async function loadMidiFile(path: string): Promise<LoadedMidiFile> {
   const buffer = await readFile(path)
   const hash = createHash('sha1').update(buffer).digest('hex')
+  void rememberRecent(path)
   return { name: basename(path), path, hash, data: new Uint8Array(buffer) }
+}
+
+async function rememberRecent(path: string): Promise<void> {
+  if (!recent) return
+  await recent.add(path)
+  app.addRecentDocument(path) // Windows jump list
+  recentFilesChanged()
+}
+
+/** Updates File > Open Recent and the start screen. */
+function recentFilesChanged(): void {
+  buildMenu()
+  if (recent) mainWindow?.webContents.send(IpcChannels.recentFilesChanged, describeRecent(recent.entries))
+}
+
+/** Opens a recent file from the menu, or offers to forget it if it is gone. */
+async function openRecentFromMenu(path: string): Promise<void> {
+  if (!mainWindow) return
+  try {
+    mainWindow.webContents.send(IpcChannels.openFile, await loadMidiFile(path))
+  } catch {
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      message: `${basename(path)} could not be opened.`,
+      detail: 'It may have been moved or deleted.',
+      buttons: ['Remove from Recent', 'Keep'],
+      defaultId: 0
+    })
+    if (response === 0 && recent) {
+      await recent.remove(path)
+      recentFilesChanged()
+    }
+  }
+}
+
+function openRecentMenu(): Electron.MenuItemConstructorOptions {
+  const files = recent ? describeRecent(recent.entries) : []
+  const items: Electron.MenuItemConstructorOptions[] = files.map((file, i) => ({
+    // Ampersands would become mnemonics; escape them.
+    label: `${i + 1}. ${file.name.replace(/&/g, '&&')}${file.exists ? '' : '  (not found)'}`,
+    sublabel: file.folder,
+    toolTip: file.path,
+    accelerator: i < 9 ? `CmdOrCtrl+${i + 1}` : undefined,
+    click: () => void openRecentFromMenu(file.path)
+  }))
+  return {
+    label: 'Open Recent',
+    submenu: [
+      ...(items.length > 0 ? items : [{ label: 'No recent files', enabled: false }]),
+      { type: 'separator' },
+      {
+        label: 'Clear Recently Opened',
+        enabled: items.length > 0,
+        click: async () => {
+          await recent?.clear()
+          app.clearRecentDocuments()
+          recentFilesChanged()
+        }
+      }
+    ]
+  }
 }
 
 /** Auto-saved presets live in the user data folder, one JSON file per MIDI file hash. */
@@ -50,6 +116,7 @@ function buildMenu(): void {
           accelerator: 'CmdOrCtrl+O',
           click: () => sendMenuCommand('open-midi')
         },
+        openRecentMenu(),
         { type: 'separator' },
         {
           label: 'Save Preset As…',
@@ -101,6 +168,22 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IpcChannels.readMidiFile, (_event, path: string) => loadMidiFile(path))
+
+  ipcMain.handle(IpcChannels.getRecentFiles, () => (recent ? describeRecent(recent.entries) : []))
+  ipcMain.handle(IpcChannels.openRecentFile, (_event, path: string) => {
+    // Only paths the app itself put on the list.
+    if (!recent?.has(path)) throw new Error('Not a recently opened file')
+    return loadMidiFile(path)
+  })
+  ipcMain.handle(IpcChannels.removeRecentFile, async (_event, path: string) => {
+    await recent?.remove(path)
+    recentFilesChanged()
+  })
+  ipcMain.handle(IpcChannels.clearRecentFiles, async () => {
+    await recent?.clear()
+    app.clearRecentDocuments()
+    recentFilesChanged()
+  })
 
   // The renderer asks once on startup for a file the app was launched with.
   let launchPath = midiPathFromArgs(process.argv)
@@ -211,7 +294,9 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    recent = new RecentFilesStore(join(app.getPath('userData'), 'recent-files.json'))
+    await recent.load()
     buildMenu()
     registerIpc()
     createWindow()

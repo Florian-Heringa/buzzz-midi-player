@@ -323,6 +323,97 @@ select {
   text-align: center;
 }
 
+/* ---- Start screen (no file open) ---- */
+
+.start-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 0;
+}
+
+.start-screen__open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.start-screen__recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.start-screen__recent h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.start-screen__clear {
+  padding: 2px 8px;
+  font-size: 0.85rem;
+}
+
+.start-screen__recent ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.start-screen__recent li {
+  display: flex;
+  gap: 6px;
+}
+
+/* One row per file: name, folder, when. */
+.start-screen__file {
+  display: grid;
+  flex: 1;
+  /* Same columns on every row, so names and folders line up. */
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.start-screen__name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-screen__folder,
+.start-screen__when {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-screen__missing .start-screen__name {
+  text-decoration: line-through;
+}
+
+.start-screen__remove {
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
 .practice-header {
   display: flex;
   align-items: center;
