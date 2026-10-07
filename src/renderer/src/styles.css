@@ -323,6 +323,21 @@ select {
   text-align: center;
 }
 
+/* ---- Start page (no file open): one pane, settings at the bottom ---- */
+
+.start-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 32px 16px 20px;
+  overflow: auto;
+}
+
+.start-page__settings {
+  align-self: center;
+  margin-top: auto;
+}
+
 /* ---- Start screen (no file open) ---- */
 
 .start-screen {
@@ -534,11 +549,6 @@ select {
 
 .mixer-resets .mixer-resets__all {
   margin-top: auto;
-}
-
-.mixer-panel__empty {
-  margin: 0;
-  padding: 12px;
 }
 
 .strip {

@@ -43,7 +43,7 @@ export function MixerPanel(): React.JSX.Element {
   const assignment = useAppStore((s) => s.assignment)
   const selectedTrackId = useAppStore((s) => s.selectedTrackId)
   const trackLabels = useAppStore((s) => s.trackLabels)
-  if (!song) return <p className="placeholder mixer-panel__empty">The mixer appears when a file is open.</p>
+  if (!song) return <></>
   const anySolo = mixes.some((m) => m.solo)
 
   return (

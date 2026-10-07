@@ -23,6 +23,7 @@ export default function App(): React.JSX.Element {
   // The song as the user reads its key (sharps or flats, major or minor).
   const keyedSong = useAppStore(interpretedSong)
   const { openDialog, openRecent, loadDroppedFile } = useMidiLoader()
+  const openSettings = useAppStore((s) => s.openSettings)
   const [dragging, setDragging] = useState(false)
 
   const onDrop = (event: DragEvent): void => {
@@ -42,36 +43,40 @@ export default function App(): React.JSX.Element {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
-      <SplitPanes
-        // Controls and staff fit their content; the mixer takes the rest. Controls and mixer
-        // never get smaller than their content, so no text is cut off.
-        fillPane={2}
-        minSizes={['content', 80, 'content']}
-        storageKey="pane-layout"
-        labels={['controls', 'staff', 'mixer']}
-      >
-        <TopBar onOpen={() => void openDialog()} />
+      {song ? (
+        <SplitPanes
+          // Controls and staff fit their content; the mixer takes the rest. Controls and mixer
+          // never get smaller than their content, so no text is cut off.
+          fillPane={2}
+          minSizes={['content', 80, 'content']}
+          storageKey="pane-layout"
+          labels={['controls', 'staff', 'mixer']}
+        >
+          <TopBar onOpen={() => void openDialog()} />
 
-        <main className="staff-pane" style={selectedTrack ? trackHueStyle(selectedTrack.id) : undefined}>
-          {song ? (
-            <>
-              <PracticeHeader />
-              {selectedTrack &&
-                (selectedTrack.isDrum ? (
-                  <p className="placeholder">Drum tracks are not shown on a staff.</p>
-                ) : noteDisplay === 'piano-roll' ? (
-                  <StaffView song={keyedSong ?? song} track={selectedTrack} />
-                ) : (
-                  <SheetView song={keyedSong ?? song} track={selectedTrack} />
-                ))}
-            </>
-          ) : (
-            <StartScreen onOpen={() => void openDialog()} onOpenRecent={(path) => void openRecent(path)} />
-          )}
+          <main className="staff-pane" style={selectedTrack ? trackHueStyle(selectedTrack.id) : undefined}>
+            <PracticeHeader />
+            {selectedTrack &&
+              (selectedTrack.isDrum ? (
+                <p className="placeholder">Drum tracks are not shown on a staff.</p>
+              ) : noteDisplay === 'piano-roll' ? (
+                <StaffView song={keyedSong ?? song} track={selectedTrack} />
+              ) : (
+                <SheetView song={keyedSong ?? song} track={selectedTrack} />
+              ))}
+          </main>
+
+          <MixerPanel />
+        </SplitPanes>
+      ) : (
+        // No file yet: one pane with opening a file, recent files and settings.
+        <main className="start-page">
+          <StartScreen onOpen={() => void openDialog()} onOpenRecent={(path) => void openRecent(path)} />
+          <button className="settings-button start-page__settings" onClick={openSettings} aria-haspopup="dialog">
+            <span aria-hidden>⚙</span> Settings
+          </button>
         </main>
-
-        <MixerPanel />
-      </SplitPanes>
+      )}
 
       <ExportDialog />
       <SettingsDialog />

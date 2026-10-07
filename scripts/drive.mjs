@@ -64,6 +64,30 @@ try {
   await page.waitForSelector('text=Open MIDI')
   console.log('renderer:', page.url())
 
+  // Start page: one pane with a single Open MIDI button and Settings at the bottom centre.
+  const startPage = await page.evaluate(() => {
+    const settings = document.querySelector('.start-page .settings-button').getBoundingClientRect()
+    return {
+      openButtons: [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Open MIDI')).length,
+      exportButtons: [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Export MP3')).length,
+      panes: document.querySelectorAll('.split-panes__pane').length,
+      settingsCentre: settings.left + settings.width / 2 - window.innerWidth / 2,
+      settingsBottomGap: window.innerHeight - settings.bottom
+    }
+  })
+  check(
+    'the start page is one pane with a single Open MIDI button and no Export',
+    startPage.openButtons === 1 && startPage.exportButtons === 0 && startPage.panes === 0,
+    JSON.stringify(startPage)
+  )
+  check(
+    'Settings sits at the bottom centre of the start page',
+    Math.abs(startPage.settingsCentre) <= 2 && startPage.settingsBottomGap < 40
+  )
+  await page.click('.start-page .settings-button')
+  check('Settings opens from the start page', (await page.locator('.settings-dialog').count()) === 1)
+  await page.keyboard.press('Escape')
+
   // Make the open dialog return the MIDI file without user interaction.
   await app.evaluate(({ dialog }, path) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
@@ -71,6 +95,10 @@ try {
   await page.click('text=Open MIDI')
   await page.waitForSelector('.strip')
   console.log('tracks:', (await page.locator('.strip__name').allInnerTexts()).join(', '))
+  check(
+    'opening a file switches to the full layout',
+    (await page.locator('.split-panes__pane').count()) === 3 && (await page.locator('.start-page').count()) === 0
+  )
   await page.waitForFunction(() => !document.querySelector('.transport__status'), null, {
     timeout: 30_000
   })
