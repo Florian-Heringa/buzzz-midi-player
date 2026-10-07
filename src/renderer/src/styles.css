@@ -1084,8 +1084,20 @@ select {
   color: var(--note);
 }
 
+/* VexFlow draws stems in black; make them follow the note color like everything else. */
+.sheet-view .vf-stem {
+  stroke: currentColor;
+}
+
+/* Notes with their stems, flags, beams and ties; themes can give them their own color. */
+.sheet-view .sheet-note,
+.sheet-view .vf-beam,
+.sheet-view .vf-stavetie {
+  color: var(--sheet-note, var(--note));
+}
+
 .sheet-view .sheet-note--sounding {
-  color: var(--note-sounding);
+  color: var(--sheet-note-sounding, var(--note-sounding));
 }
 
 .sheet-view .staff__playhead {

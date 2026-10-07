@@ -65,7 +65,17 @@
   --track-color: var(--accent);
 }
 
-/* Classic dark: notes in the theme's blue, so they stand out on the dark staff. */
+/* Classic: sheet music notes in the blue of the buttons; the playing note stands out. */
+:root[data-theme='classic'] .staff-pane {
+  --sheet-note: var(--accent);
+  --sheet-note-sounding: #c2185b;
+}
+
+:root[data-theme='classic'][data-mode='dark'] .staff-pane {
+  --sheet-note-sounding: #ffffff;
+}
+
+/* Classic dark piano roll: notes in the theme's blue, so they stand out on the dark staff. */
 :root[data-theme='classic'][data-mode='dark'] .staff-pane {
   --note-duration: var(--accent);
   --note-sounding: #ffffff;
@@ -76,9 +86,6 @@
   fill: var(--notehead);
 }
 
-:root[data-theme='classic'][data-mode='dark'] .sheet-view .sheet-note:not(.sheet-note--sounding) {
-  color: var(--notehead);
-}
 
 /* ---- Modern: colorful, rounded, soft depth ---- */
 
@@ -581,4 +588,21 @@
   flex-basis: 100%;
   flex-wrap: wrap;
   order: 1;
+}
+
+/* ---- Note colors for sheet music (and the playing note in both views) ---- */
+
+/* Old School: notes entirely LCD green; the playing note in the playhead's yellow. */
+:root[data-theme='oldschool'] .staff-pane {
+  --sheet-note: #00e000;
+  --note-sounding: var(--playhead);
+}
+
+/* Retro: white notes on the dark pattern view (dark notes on the light FastTracker one). */
+:root[data-theme='retro'][data-mode='dark'] .staff-pane {
+  --sheet-note: #ffffff;
+}
+
+:root[data-theme='retro'] .staff-pane {
+  --sheet-note-sounding: var(--accent);
 }

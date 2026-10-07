@@ -522,6 +522,44 @@ try {
   await page.mouse.click(bar3.left + 40, bar3.top + bar3.height / 2)
   const seekedTick = Number(await page.locator('.transport__position').inputValue())
   check('clicking the sheet seeks', seekedTick >= 3840 && seekedTick < 4800, `tick ${seekedTick}`)
+  // Note colors per theme: whole notes (stems included) in one clearly visible color.
+  const expectedNotes = {
+    'oldschool dark': 'rgb(0, 224, 0)',
+    'oldschool light': 'rgb(0, 224, 0)',
+    'retro dark': 'rgb(255, 255, 255)',
+    'classic light': 'rgb(58, 111, 247)',
+    'classic dark': 'rgb(58, 111, 247)'
+  }
+  for (const [variant, expected] of Object.entries(expectedNotes)) {
+    const [theme, mode] = variant.split(' ')
+    await page.click('.settings-button')
+    await page.check(`input[name="theme"][value="${theme}"]`)
+    await page.check(`input[name="color-mode"][value="${mode}"]`)
+    await page.click('.settings-dialog >> text=Done')
+    const colors = await page.evaluate(() => {
+      const note = document.querySelector('.sheet-view .sheet-note:not(.sheet-note--sounding)')
+      const stem = note.querySelector('.vf-stem')
+      const bg = getComputedStyle(document.querySelector('.sheet-view')).backgroundColor
+      const lum = (c) =>
+        (c.match(/[\d.]+/g) ?? [])
+          .slice(0, 3)
+          .map((n) => Number(n) / 255)
+          .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+          .reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0)
+      const color = getComputedStyle(note).color
+      const [hi, lo] = [lum(color), lum(bg)].sort((a, b) => b - a)
+      return { color, stem: getComputedStyle(stem).stroke, contrast: (hi + 0.05) / (lo + 0.05) }
+    })
+    check(
+      `${variant}: notes and stems in one visible color`,
+      colors.color === expected && colors.stem === expected && colors.contrast >= 3,
+      `${colors.color}, stem ${colors.stem}, ${colors.contrast.toFixed(1)}:1`
+    )
+  }
+  await page.click('.settings-button')
+  await page.check('input[name="theme"][value="modern"]')
+  await page.check('input[name="color-mode"][value="system"]')
+  await page.click('.settings-dialog >> text=Done')
   await page.screenshot({ path: resolve(SHOT_DIR, 'sheet-music.png') })
   // Zooming out shrinks the whole sheet (spacing can't shrink without notes colliding).
   const sheetWidth = () => page.locator('.sheet-view__drawing svg').evaluate((svg) => svg.getBoundingClientRect().width)
