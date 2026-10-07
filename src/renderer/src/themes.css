@@ -266,6 +266,8 @@
   --control-bg: linear-gradient(#d6d6e0, #a8a8b8);
   --control-hover-bg: linear-gradient(#e6e6ee, #b8b8c8);
   --control-text: #14141c;
+  /* Secondary text on the silver buttons. */
+  --control-muted: #3c3c4c;
   --control-border: var(--button-lo);
   --control-hover-border: var(--button-lo);
   --field-bg: #000000;

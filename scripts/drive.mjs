@@ -998,6 +998,48 @@ try {
   await page.locator('.start-screen__remove[aria-label="Remove doomed.mid from recent files"]').click()
   await page.waitForFunction(() => ![...document.querySelectorAll('.start-screen__name')].some((n) => n.textContent === 'doomed.mid'))
   check('a file can be removed from the list', (await page.locator('.start-screen__name').count()) === 2)
+  // Recent file details stay readable in every theme (they sit on buttons, which some themes
+  // draw light on a dark UI).
+  for (const theme of ['modern', 'classic', 'oldschool', 'retro']) {
+    for (const mode of ['light', 'dark']) {
+      await page.click('.start-page .settings-button')
+      await page.check(`input[name="theme"][value="${theme}"]`)
+      await page.check(`input[name="color-mode"][value="${mode}"]`)
+      await page.click('.settings-dialog >> text=Done')
+      const worst = await page.evaluate(() => {
+        const toRgb = (c) => {
+          const nums = (c.match(/[\d.]+/g) ?? []).map(Number)
+          return (c.startsWith('color(') ? nums : nums.map((n) => n / 255)).slice(0, 3)
+        }
+        const lum = (rgb) =>
+          rgb.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0)
+        const ratio = (a, b) => {
+          const [hi, lo] = [lum(toRgb(a)), lum(toRgb(b))].sort((x, y) => y - x)
+          return (hi + 0.05) / (lo + 0.05)
+        }
+        const backgroundsOf = (el) => {
+          for (let node = el; node; node = node.parentElement) {
+            const style = getComputedStyle(node)
+            if (style.backgroundImage.includes('gradient')) return style.backgroundImage.match(/(?:rgba?|color)\([^)]*\)/g)
+            if (style.backgroundColor !== 'rgba(0, 0, 0, 0)') return [style.backgroundColor]
+          }
+          return ['rgb(255, 255, 255)']
+        }
+        let min = Infinity
+        for (const el of document.querySelectorAll('.start-screen__folder, .start-screen__when, .start-screen__name')) {
+          const color = getComputedStyle(el).color
+          for (const bg of backgroundsOf(el)) min = Math.min(min, ratio(color, bg))
+        }
+        return min
+      })
+      check(`${theme} ${mode}: recent file details are readable`, worst >= 4.5, `${worst.toFixed(1)}:1`)
+      if (theme === 'oldschool' && mode === 'dark') await page.screenshot({ path: resolve(SHOT_DIR, 'start-oldschool.png') })
+    }
+  }
+  await page.click('.start-page .settings-button')
+  await page.check('input[name="theme"][value="modern"]')
+  await page.check('input[name="color-mode"][value="system"]')
+  await page.click('.settings-dialog >> text=Done')
   await page.screenshot({ path: resolve(SHOT_DIR, 'start-screen.png') })
   await page.click('.start-screen__clear')
   await page.waitForFunction(() => !document.querySelector('.start-screen__recent'))

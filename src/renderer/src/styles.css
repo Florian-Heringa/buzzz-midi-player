@@ -410,10 +410,11 @@ select {
   white-space: nowrap;
 }
 
+/* Secondary text on a button: themes with light buttons on a dark UI set --control-muted. */
 .start-screen__folder,
 .start-screen__when {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--control-muted, var(--muted));
   font-size: 0.85rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -425,7 +426,7 @@ select {
 
 .start-screen__remove {
   padding: 0 10px;
-  color: var(--muted);
+  color: var(--control-muted, var(--muted));
   font-size: 1.1rem;
 }
 
