@@ -7,14 +7,14 @@ import { ThemeMenu } from './ThemeMenu'
 /** Top pane: file actions, song details, transport, tempo and loop controls. */
 export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   const song = useAppStore((s) => s.song)
-  const error = useAppStore((s) => s.error)
-  const notice = useAppStore((s) => s.notice)
   const openExportDialog = useAppStore((s) => s.openExportDialog)
 
+  // The header is a single row that never wraps, so its height stays fixed when items
+  // (like the last export) appear; song details are clipped instead on narrow windows.
   return (
     <div className="top-bar">
       <header className="top-bar__header">
-        <div className="top-bar__row">
+        <div className="top-bar__row top-bar__row--fixed">
           <button onClick={onOpen}>Open MIDI…</button>
           <button onClick={openExportDialog} disabled={!song}>
             Export MP3…
@@ -22,20 +22,10 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
           <span className="top-bar__file">{song ? song.name : 'No file loaded'}</span>
           <SongSummary />
           <div className="top-bar__end">
-            {notice && (
-              <span className="top-bar__notice" role="status">
-                {notice}
-              </span>
-            )}
             <LastExport />
             <ThemeMenu />
           </div>
         </div>
-        {error && (
-          <div className="error" role="alert">
-            {error}
-          </div>
-        )}
       </header>
       {song && (
         <div className="top-bar__playback" role="group" aria-label="Playback">
@@ -97,7 +87,8 @@ function SongSummary(): React.JSX.Element | null {
     ['Tracks', String(song.tracks.length)]
   ]
   return (
-    <dl className="song-summary">
+    // Full text as a tooltip, since the summary is clipped when the header runs out of room.
+    <dl className="song-summary" title={items.map(([label, value]) => `${label} ${value}`).join(' · ')}>
       {items.map(([label, value]) => (
         <div key={label} className="song-summary__item">
           <dt>{label}</dt>

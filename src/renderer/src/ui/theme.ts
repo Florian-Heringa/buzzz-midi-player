@@ -1,6 +1,6 @@
 import { useSyncExternalStore, type CSSProperties } from 'react'
 
-export type ThemeName = 'modern' | 'classic'
+export type ThemeName = 'modern' | 'classic' | 'oldschool' | 'retro'
 export type ColorMode = 'system' | 'light' | 'dark'
 
 export interface ThemePrefs {
@@ -10,7 +10,9 @@ export interface ThemePrefs {
 
 export const THEMES: { value: ThemeName; label: string }[] = [
   { value: 'modern', label: 'Modern' },
-  { value: 'classic', label: 'Classic' }
+  { value: 'classic', label: 'Classic' },
+  { value: 'oldschool', label: 'Old School' },
+  { value: 'retro', label: 'Retro' }
 ]
 
 export const COLOR_MODES: { value: ColorMode; label: string }[] = [

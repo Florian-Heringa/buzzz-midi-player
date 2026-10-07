@@ -102,6 +102,16 @@ const StaticStaff = memo(function StaticStaff({ layout }: { layout: StaffLayout 
         </g>
       ))}
 
+      {layout.beatlines.map((x) => (
+        <line
+          key={`beat-${x}`}
+          className="staff__beatline"
+          x1={x}
+          x2={x}
+          y1={staves[0].top}
+          y2={staves[staves.length - 1].bottom}
+        />
+      ))}
       {barlines.map((bar) => (
         <g key={bar.number}>
           <line

@@ -6,6 +6,7 @@ import { MixerPanel } from './ui/MixerPanel'
 import { PracticeHeader } from './ui/PracticeHeader'
 import { SplitPanes } from './ui/SplitPanes'
 import { trackHueStyle } from './ui/theme'
+import { Toasts } from './ui/Toasts'
 import { TopBar } from './ui/TopBar'
 import { useMidiLoader } from './ui/useMidiLoader'
 
@@ -64,6 +65,7 @@ export default function App(): React.JSX.Element {
       </SplitPanes>
 
       <ExportDialog />
+      <Toasts />
     </div>
   )
 }

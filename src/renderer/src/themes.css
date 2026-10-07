@@ -210,3 +210,343 @@
 :root[data-theme='classic'] .practice-header__swatch {
   display: none;
 }
+
+/* ======================================================================
+ * Old School: Winamp 2.x classic skin. Bevelled chrome, silver buttons,
+ * black LCD displays with green text. Light mode is Windows 9x silver.
+ * ====================================================================== */
+
+:root[data-theme='oldschool'] {
+  --font: Tahoma, Verdana, 'Segoe UI', sans-serif;
+  --lcd-font: Consolas, 'Lucida Console', monospace;
+  --radius-sm: 0;
+  --radius: 0;
+  --radius-lg: 0;
+  --shadow-card: none;
+  --shadow-dialog: 4px 4px 0 rgb(0 0 0 / 45%);
+  --backdrop: rgb(0 0 0 / 45%);
+  --bg: #1b1b26;
+  --panel: #33334a;
+  --bevel-hi: #6a6a8c;
+  --bevel-lo: #111119;
+  --button-hi: #ffffff;
+  --button-lo: #50505f;
+  --text: #e4e4ee;
+  --muted: #b0b0c8;
+  --accent: #e8c547;
+  --accent-fill: linear-gradient(#f3d873, #c9a52c);
+  --on-accent: #1a1400;
+  --border: #111119;
+  --error: #ff7a7a;
+  --mute: #ff9d2e;
+  --on-mute: #1a0d00;
+  --header-bg: linear-gradient(#4b4b70, #2a2a40);
+  --control-bg: linear-gradient(#d6d6e0, #a8a8b8);
+  --control-hover-bg: linear-gradient(#e6e6ee, #b8b8c8);
+  --control-text: #14141c;
+  --control-border: var(--button-lo);
+  --control-hover-border: var(--button-lo);
+  --field-bg: #000000;
+  --divider: var(--panel);
+  --strip-bg: var(--panel);
+  --lcd-bg: #000000;
+  --lcd-text: #00e000;
+  --lcd-muted: #00b000;
+  --staff-bg: #000000;
+  --staff-line: #127a12;
+  --staff-beat: transparent;
+  --staff-muted: #00b000;
+  --note: #00e000;
+  --playhead: #ffd23f;
+  --knob-cap: #c4c4d0;
+  --knob-pointer: #14141c;
+  --knob-track: #000000;
+  --meter-bg: #000000;
+  --meter-low: #00c000;
+  --meter-mid: #d8e000;
+  --meter-high: #ff3a00;
+}
+
+:root[data-theme='oldschool'][data-mode='light'] {
+  --bg: #a8a8a8;
+  --panel: #c0c0c0;
+  --bevel-hi: #ffffff;
+  --bevel-lo: #404040;
+  --button-hi: #ffffff;
+  --button-lo: #404040;
+  --text: #000000;
+  --muted: #303030;
+  --accent: #000080;
+  --accent-fill: linear-gradient(#1a3fa0, #000080);
+  --on-accent: #ffffff;
+  --border: #404040;
+  --error: #8b0000;
+  --mute: #ffb000;
+  --on-mute: #000000;
+  --header-bg: linear-gradient(90deg, #000080, #1084d0);
+  --control-bg: #c0c0c0;
+  --control-hover-bg: #d4d4d4;
+  --control-text: #000000;
+  --knob-cap: #c0c0c0;
+  --knob-pointer: #000000;
+  --knob-track: #808080;
+}
+
+/* Every track is the same LCD green, as on Winamp's displays. */
+:root[data-theme='oldschool'] .strip,
+:root[data-theme='oldschool'] .staff-pane {
+  --track-color: #00e000;
+}
+
+/* Raised bevel: light top-left, dark bottom-right. */
+:root[data-theme='oldschool']
+  :is(.strip, .top-bar__header, .top-bar__playback, .theme-menu__panel, .toast, .export-dialog, .last-export) {
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+}
+
+:root[data-theme='oldschool'] button:not(.last-export *, .toast__dismiss) {
+  border: 2px solid;
+  border-color: var(--button-hi) var(--button-lo) var(--button-lo) var(--button-hi);
+}
+
+/* Pressed buttons sink in. */
+:root[data-theme='oldschool']
+  :is(button:active, .button--active, .strip__toggle--mute, .strip__toggle--solo):not(.last-export *, .toast__dismiss) {
+  border-color: var(--button-lo) var(--button-hi) var(--button-hi) var(--button-lo);
+}
+
+/* Sunken LCD displays. */
+:root[data-theme='oldschool']
+  :is(.song-summary, .top-bar__file, .transport__time, .staff-view, .strip__meter, input[type='text'], select) {
+  border: 2px solid;
+  border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
+}
+
+:root[data-theme='oldschool'] :is(.song-summary, .top-bar__file, .transport__time, input[type='text'], select) {
+  padding: 2px 8px;
+  background: var(--lcd-bg);
+  color: var(--lcd-text);
+  font-family: var(--lcd-font);
+}
+
+:root[data-theme='oldschool'] .song-summary dt {
+  color: var(--lcd-muted);
+}
+
+:root[data-theme='oldschool'] .transport__time {
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+}
+
+:root[data-theme='oldschool'] .split-panes__divider {
+  border-top: 1px solid var(--bevel-hi);
+  border-bottom: 1px solid var(--bevel-lo);
+}
+
+:root[data-theme='oldschool'] .strip--selected {
+  border-color: var(--accent);
+  background: var(--panel);
+}
+
+:root[data-theme='oldschool'] .strip--selected .strip__name {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+
+/* Spectrum-analyzer style meter: segmented, green to red. */
+:root[data-theme='oldschool'] .strip__meter-fill {
+  background:
+    repeating-linear-gradient(to top, transparent 0 3px, var(--meter-bg) 3px 4px),
+    linear-gradient(to top, var(--meter-low), var(--meter-mid) 65%, var(--meter-high));
+}
+
+/* ======================================================================
+ * Retro: music tracker (Renoise, Impulse Tracker, MilkyTracker). Monospace,
+ * uppercase labels, beat grid, amber play row, colored channels.
+ * Light mode is the slate-blue bevelled FastTracker 2 / MilkyTracker look.
+ * ====================================================================== */
+
+:root[data-theme='retro'] {
+  --font: 'Cascadia Mono', Consolas, 'Lucida Console', monospace;
+  --radius-sm: 0;
+  --radius: 2px;
+  --radius-lg: 2px;
+  --shadow-card: none;
+  --shadow-dialog: 0 0 0 1px var(--accent), 0 12px 30px rgb(0 0 0 / 50%);
+  --backdrop: rgb(0 0 0 / 55%);
+  --bg: #0f1114;
+  --panel: #1a1d22;
+  --bevel-hi: #3a414c;
+  --bevel-lo: #08090b;
+  --text: #e1e5ec;
+  --muted: #8f98a9;
+  --accent: #ffb12e;
+  --accent-2: #39c6d4;
+  --accent-fill: var(--accent);
+  --on-accent: #161000;
+  --border: #323843;
+  --error: #ff6b6b;
+  --mute: #e0a030;
+  --on-mute: #120c00;
+  --header-bg: #14171b;
+  --control-bg: #23272e;
+  --control-border: #3a414c;
+  --control-hover-bg: #2b3039;
+  --control-hover-border: var(--accent);
+  --field-bg: #08090b;
+  --divider: #08090b;
+  --strip-bg: var(--panel);
+  --lcd-bg: #08090b;
+  --lcd-text: #39c6d4;
+  --staff-bg: #0a0c0f;
+  --staff-line: #454d5a;
+  --staff-beat: #1b1f26;
+  --staff-muted: #8f98a9;
+  --note: #e1e5ec;
+  --playhead: #ffb12e;
+  --playhead-width: 3px;
+  --knob-cap: #23272e;
+  --knob-pointer: #e1e5ec;
+  --knob-track: #08090b;
+  --meter-bg: #08090b;
+  --track-s: 62%;
+  --track-l: 62%;
+}
+
+:root[data-theme='retro'][data-mode='light'] {
+  --bg: #8ea2c2;
+  --panel: #a9b9d3;
+  --bevel-hi: #e6edf7;
+  --bevel-lo: #4e5f7e;
+  --text: #0a1020;
+  --muted: #1d2a46;
+  --accent: #16357a;
+  --accent-2: #16357a;
+  --accent-fill: #16357a;
+  --on-accent: #ffffff;
+  --border: #4e5f7e;
+  --error: #7a0000;
+  --mute: #c27a00;
+  --on-mute: #000000;
+  --header-bg: #9fb0cc;
+  --control-bg: #b8c6dc;
+  --control-border: #4e5f7e;
+  --control-hover-bg: #c8d4e6;
+  --control-hover-border: #16357a;
+  --field-bg: #e9eef7;
+  --divider: #4e5f7e;
+  --lcd-bg: #e9eef7;
+  --lcd-text: #16357a;
+  --staff-bg: #e9eef7;
+  --staff-line: #7d8db0;
+  --staff-beat: #d3dbea;
+  --staff-muted: #33415f;
+  --note: #0a1020;
+  --playhead: #b85c00;
+  --knob-cap: #b8c6dc;
+  --knob-pointer: #0a1020;
+  --knob-track: #4e5f7e;
+  --meter-bg: #e9eef7;
+  --track-s: 70%;
+  --track-l: 36%;
+}
+
+:root[data-theme='retro'] .strip,
+:root[data-theme='retro'] .staff-pane {
+  --track-color: hsl(var(--track-hue, 250) var(--track-s) var(--track-l));
+}
+
+/* Tracker labels in uppercase. Names and values keep their case. */
+:root[data-theme='retro']
+  :is(button:not(.strip__name, .last-export *), .control-group__label, .song-summary dt, .knob__text, .strip__meta, legend, .theme-menu__option) {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Bevelled buttons: subtle in dark, pronounced in light like FastTracker 2. */
+:root[data-theme='retro'] button:not(.last-export *, .toast__dismiss) {
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+}
+
+:root[data-theme='retro'] :is(button:active, .button--active):not(.last-export *, .toast__dismiss) {
+  border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
+}
+
+:root[data-theme='retro'] :is(.song-summary, .transport__time, input[type='text'], select) {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  background: var(--lcd-bg);
+  color: var(--lcd-text);
+}
+
+:root[data-theme='retro'] .top-bar__header {
+  border-bottom: 2px solid var(--accent);
+}
+
+/* Channel strips: colored header bar, like tracker track headers. */
+:root[data-theme='retro'] .strip {
+  border-top: 4px solid var(--track-color);
+}
+
+:root[data-theme='retro'] .strip__name {
+  border-left: 4px solid var(--track-color);
+}
+
+:root[data-theme='retro'] .strip--selected {
+  border-color: var(--track-color);
+  background: color-mix(in srgb, var(--track-color) 12%, var(--panel));
+}
+
+/* Pattern view: notes in the track's color, the play row in amber. */
+:root[data-theme='retro'] .staff__notehead {
+  fill: var(--track-color);
+}
+
+:root[data-theme='retro'] .staff__notehead--sounding {
+  fill: var(--accent);
+}
+
+:root[data-theme='retro'] .strip__meter-fill {
+  background:
+    repeating-linear-gradient(to top, transparent 0 3px, var(--meter-bg) 3px 4px),
+    linear-gradient(to top, color-mix(in srgb, var(--track-color) 55%, var(--meter-bg)), var(--track-color));
+}
+
+/* ---- Range sliders for the Old School and Retro themes ---- */
+
+:root:is([data-theme='oldschool'], [data-theme='retro']) input[type='range'] {
+  height: 16px;
+  background: transparent;
+  appearance: none;
+}
+
+:root:is([data-theme='oldschool'], [data-theme='retro']) input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  border: 1px solid;
+  border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
+  background: var(--field-bg);
+}
+
+:root:is([data-theme='oldschool'], [data-theme='retro']) input[type='range']::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border: 1px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  background: var(--control-bg);
+  appearance: none;
+}
+
+:root[data-theme='retro'] input[type='range']::-webkit-slider-thumb {
+  background: var(--accent);
+}
+
+/* Themed scrollbars, so native light/dark bars don't clash with the bevelled chrome. */
+:root:is([data-theme='oldschool'], [data-theme='retro']) {
+  scrollbar-color: var(--bevel-hi) var(--bg);
+}
+
+:root:is([data-theme='oldschool'], [data-theme='retro']) .staff-view__scroller {
+  scrollbar-color: var(--staff-line) var(--staff-bg);
+}

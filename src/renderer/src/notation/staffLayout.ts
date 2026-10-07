@@ -115,6 +115,8 @@ export interface StaffLayout {
   staves: StaffGeometry[]
   notes: LaidOutNote[]
   barlines: { x: number; number: number }[]
+  /** x of every beat that isn't on a barline. */
+  beatlines: number[]
   keySignature: { staff: number; accidental: 'sharp' | 'flat'; y: number }[]
 }
 
@@ -186,6 +188,16 @@ export function layoutStaff(song: Song, track: Track, options: LayoutOptions = {
     number: i + 1
   }))
 
+  // Beats inside each measure (not on a barline), for themes that draw a beat grid.
+  const beatlines: number[] = []
+  song.timeSignatures.forEach((ts, i) => {
+    const end = song.timeSignatures[i + 1]?.tick ?? song.durationTicks
+    const beat = (song.ppq * 4) / ts.denominator
+    for (let n = 0, tick = ts.tick; tick < end; n++, tick += beat) {
+      if (n % ts.numerator !== 0) beatlines.push(originX + tick * pxPerTick)
+    }
+  })
+
   const keySignature: StaffLayout['keySignature'] = []
   staves.forEach((staff, staffIndex) => {
     const accidental = fifths >= 0 ? 'sharp' : 'flat'
@@ -205,6 +217,7 @@ export function layoutStaff(song: Song, track: Track, options: LayoutOptions = {
     staves,
     notes,
     barlines,
+    beatlines,
     keySignature
   }
 }

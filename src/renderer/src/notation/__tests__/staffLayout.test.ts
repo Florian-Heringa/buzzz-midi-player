@@ -83,6 +83,9 @@ describe('layoutStaff', () => {
     const twoBars = parseSong(buildMidi([note(0, 60, 1920 * 2)]), 'x.mid')
     expect(measureStarts(twoBars)).toEqual([0, 1920])
     expect(measureCount(twoBars)).toBe(2)
+    // 4/4: three beat lines inside each of the two bars.
+    const grid = layoutStaff(twoBars, twoBars.tracks[0], { pxPerBeat: 80, originX: 0 }).beatlines
+    expect(grid).toEqual([80, 160, 240, 400, 480, 560])
   })
 
   it('leaves room above the staff for high notes', () => {

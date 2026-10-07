@@ -126,20 +126,29 @@ try {
       ].filter(([a, b]) => token(a).trim() && token(b).trim())
       const results = pairs.map(([a, b]) => [`${a} on ${b}`, ratio(token(a), token(b))])
       // Rendered text in the mixer, where backgrounds are tinted per track.
-      for (const el of document.querySelectorAll('.strip__name, .strip__meta, .practice-header__title')) {
+      const sampled = '.strip__name, .strip__meta, .practice-header__title, .song-summary dd, .song-summary dt, .top-bar__file, .transport__time, .knob__text, .control-group__label'
+      for (const el of document.querySelectorAll(sampled)) {
+        // The nearest background: a solid color, or every stop of a gradient (worst one counts).
         let bgEl = el
-        let bg = getComputedStyle(bgEl).backgroundColor
-        while (bg === 'rgba(0, 0, 0, 0)' && bgEl.parentElement) {
+        let backgrounds = []
+        while (bgEl && backgrounds.length === 0) {
+          const style = getComputedStyle(bgEl)
+          if (style.backgroundImage.includes('gradient')) {
+            backgrounds = style.backgroundImage.match(/(?:rgba?|color)\([^)]*\)/g) ?? []
+          } else if (style.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+            backgrounds = [style.backgroundColor]
+          }
           bgEl = bgEl.parentElement
-          bg = getComputedStyle(bgEl).backgroundColor
         }
-        results.push([`${el.className} "${el.textContent}"`, ratio(getComputedStyle(el).color, bg)])
+        const color = getComputedStyle(el).color
+        const worst = Math.min(...backgrounds.map((bg) => ratio(color, bg)))
+        results.push([`${el.className} "${el.textContent}"`, worst])
       }
       return results.map(([name, value]) => [name, Math.round(value * 100) / 100])
     })
 
   await page.locator('.strip__name').nth(1).click() // a selected strip with a tinted background
-  for (const theme of ['modern', 'classic']) {
+  for (const theme of ['modern', 'classic', 'oldschool', 'retro']) {
     for (const mode of ['light', 'dark']) {
       await page.click('.theme-menu__button')
       await page.check(`input[name="theme"][value="${theme}"]`)
@@ -150,7 +159,7 @@ try {
       check(`${theme} ${mode} applies`, applied[0] === theme && applied[1] === mode && native === mode)
       const report = await contrastReport()
       const low = report.filter(([, value]) => value < 4.5)
-      if (theme === 'modern') {
+      if (theme !== 'classic') {
         check(`${theme} ${mode} text contrast ≥ 4.5`, low.length === 0, low.map(([n, v]) => `${n}: ${v}`).join('; '))
       } else {
         console.log(`info  ${theme} ${mode} contrast below 4.5: ${low.map(([n, v]) => `${n}: ${v}`).join('; ') || 'none'}`)
@@ -283,6 +292,45 @@ try {
 
   const cursor = await page.locator('.staff-view__svg').evaluate((el) => getComputedStyle(el).cursor)
   check('staff shows a pointer cursor', cursor === 'pointer', cursor)
+
+  // Notices and errors float: showing one must not move any part of the layout.
+  const layoutBoxes = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.split-panes__pane, .top-bar__header, .top-bar__playback, .staff-view')].map(
+        (el) => {
+          const box = el.getBoundingClientRect()
+          return [box.top, box.height].map(Math.round).join(':')
+        }
+      )
+    )
+  const beforeNotice = await layoutBoxes()
+  await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()
+      .items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((item) => item.label === 'Reset Mix and Tempo')
+      .click()
+  })
+  await page.waitForSelector('.toast--notice')
+  const duringNotice = await layoutBoxes()
+  check('a notice does not shift the layout', JSON.stringify(beforeNotice) === JSON.stringify(duringNotice))
+  // A MIDI file is not valid JSON, so loading it as a preset reports an error.
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+  }, MIDI)
+  await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()
+      .items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((item) => item.label === 'Load Preset…')
+      .click()
+  })
+  await page.waitForSelector('.toast--error')
+  const duringError = await layoutBoxes()
+  check('an error does not shift the layout', JSON.stringify(beforeNotice) === JSON.stringify(duringError))
+  await page.click('.toast__dismiss')
+  check('an error can be dismissed', (await page.locator('.toast--error').count()) === 0)
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+  }, MIDI)
 
   // Pane layout: the staff pane fits its content and the mixer takes the rest.
   const staffFit = () =>

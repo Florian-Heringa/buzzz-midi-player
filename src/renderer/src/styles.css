@@ -25,7 +25,7 @@ button {
   border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: var(--control-bg);
-  color: var(--text);
+  color: var(--control-text, var(--text));
   cursor: pointer;
 }
 
@@ -75,7 +75,65 @@ select {
 
 .error {
   color: var(--error);
-  padding: 4px 0;
+}
+
+/* ---- Toasts: float over the UI so they never shift the layout ---- */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(440px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-dialog);
+  pointer-events: auto;
+  animation: toast-in 160ms ease-out;
+}
+
+.toast--notice {
+  padding-right: 14px;
+  border-left: 4px solid var(--accent);
+}
+
+.toast--error {
+  border-left: 4px solid var(--error);
+}
+
+.toast__dismiss {
+  padding: 0 8px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
 }
 
 /* ---- Layout: three resizable panes ---- */
@@ -157,6 +215,14 @@ select {
   font-weight: 600;
 }
 
+.top-bar__row--fixed {
+  flex-wrap: nowrap;
+}
+
+.top-bar__row--fixed > * {
+  flex-shrink: 0;
+}
+
 .top-bar__end {
   display: flex;
   align-items: center;
@@ -164,24 +230,25 @@ select {
   margin-left: auto;
 }
 
-.top-bar__notice {
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  font-size: 0.85rem;
+
+.top-bar__row--fixed > .song-summary {
+  flex-shrink: 1;
 }
 
 .song-summary {
   display: flex;
-  flex-wrap: wrap;
   gap: 4px 14px;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: 0.9rem;
 }
 
 .song-summary__item {
   display: flex;
+  flex-shrink: 0;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .song-summary dt {
@@ -383,7 +450,7 @@ select {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--panel);
+  background: var(--meter-bg, var(--panel));
 }
 
 .strip__meter-fill {
@@ -424,7 +491,7 @@ select {
 }
 
 .knob__track {
-  stroke: var(--border);
+  stroke: var(--knob-track, var(--border));
 }
 
 .knob__value {
@@ -432,12 +499,12 @@ select {
 }
 
 .knob__cap {
-  fill: var(--panel);
+  fill: var(--knob-cap, var(--panel));
   stroke: var(--border);
 }
 
 .knob__pointer {
-  stroke: var(--text);
+  stroke: var(--knob-pointer, var(--text));
   stroke-width: 2;
   stroke-linecap: round;
 }
@@ -483,7 +550,7 @@ select {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--panel);
+  background: var(--staff-bg, var(--panel));
 }
 
 .staff-view__scroller {
@@ -513,7 +580,7 @@ select {
 }
 
 .staff-view__header-bg {
-  fill: var(--panel);
+  fill: var(--staff-bg, var(--panel));
 }
 
 .staff__lines line,
@@ -531,8 +598,13 @@ select {
   stroke-width: 3;
 }
 
+.staff__beatline {
+  stroke: var(--staff-beat, transparent);
+  stroke-width: 1;
+}
+
 .staff__measure-number {
-  fill: var(--muted);
+  fill: var(--staff-muted, var(--muted));
   font-size: 11px;
 }
 
@@ -563,7 +635,7 @@ select {
 
 .staff__playhead {
   stroke: var(--playhead);
-  stroke-width: 2;
+  stroke-width: var(--playhead-width, 2px);
 }
 
 /* ---- Export dialog ---- */
