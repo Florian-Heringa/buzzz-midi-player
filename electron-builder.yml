@@ -13,6 +13,16 @@ extraResources:
     filter:
       - '*.sf2'
       - '*LICENSE*'
+# One square PNG (1024px) for every platform; electron-builder makes the .ico and .icns.
+icon: _resources/MidiPlayerLogo.png
+# No spaces: release downloads keep their names.
+artifactName: electron-midi-player-${version}-${os}-${arch}.${ext}
+fileAssociations:
+  - ext: [mid, midi]
+    name: MIDI file
+    role: Viewer
+    mimeType: audio/midi
+
 win:
   target:
     - target: nsis
@@ -20,8 +30,28 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName} Setup ${version}.${ext}
-fileAssociations:
-  - ext: [mid, midi]
-    name: MIDI file
-    role: Viewer
+  artifactName: electron-midi-player-${version}-setup.${ext}
+
+mac:
+  category: public.app-category.music
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  # Unsigned for now: ad-hoc signing only (Apple Silicon refuses to run unsigned code at all).
+  identity: '-'
+  notarize: false
+dmg:
+  artifactName: electron-midi-player-${version}-mac-${arch}.${ext}
+
+linux:
+  category: Audio
+  # Debian packages need a maintainer with an email address.
+  maintainer: Florian Heringa <Florian-Heringa@users.noreply.github.com>
+  synopsis: MIDI player for practicing vocal parts
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]

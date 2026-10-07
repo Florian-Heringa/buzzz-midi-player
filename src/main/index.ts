@@ -12,9 +12,15 @@ const MIDI_EXTENSION = /\.midi?$/i
 const SOUNDFONT_FILE = 'GeneralUser-GS.sf2'
 const SHA1_HEX = /^[0-9a-f]{40}$/
 
+const isMac = process.platform === 'darwin'
+
 let mainWindow: BrowserWindow | null = null
 /** Recently opened MIDI files; created once the app is ready (it needs the user data path). */
 let recent: RecentFilesStore | null = null
+/** A file to open once the window's page asks for it (launched with one, or opened meanwhile). */
+let launchPath = midiPathFromArgs(process.argv)
+/** Whether the window's page has asked for the launch file, i.e. is listening for files. */
+let rendererListening = false
 
 /** Reads a MIDI file and remembers it as recently opened (every way of opening goes here). */
 async function loadMidiFile(path: string): Promise<LoadedMidiFile> {
@@ -27,7 +33,7 @@ async function loadMidiFile(path: string): Promise<LoadedMidiFile> {
 async function rememberRecent(path: string): Promise<void> {
   if (!recent) return
   await recent.add(path)
-  app.addRecentDocument(path) // Windows jump list
+  app.addRecentDocument(path) // Windows jump list, macOS Dock menu
   recentFilesChanged()
 }
 
@@ -107,7 +113,33 @@ function sendMenuCommand(command: MenuCommand): void {
 }
 
 function buildMenu(): void {
+  const settings: Electron.MenuItemConstructorOptions = {
+    label: 'Settings…',
+    accelerator: 'CmdOrCtrl+,',
+    click: () => sendMenuCommand('open-settings')
+  }
   const template: Electron.MenuItemConstructorOptions[] = [
+    // macOS: the app menu holds About, Settings and Quit.
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              settings,
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ] satisfies Electron.MenuItemConstructorOptions[]
+          }
+        ]
+      : []),
     {
       label: 'File',
       submenu: [
@@ -138,20 +170,23 @@ function buildMenu(): void {
           label: 'Reset Mix and Tempo',
           click: () => sendMenuCommand('reset-settings')
         },
-        { type: 'separator' },
-        {
-          label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => sendMenuCommand('open-settings')
-        },
-        { type: 'separator' },
-        { role: 'quit' }
+        ...(isMac
+          ? [{ type: 'separator' }, { role: 'close' }] satisfies Electron.MenuItemConstructorOptions[]
+          : ([
+              { type: 'separator' },
+              settings,
+              { type: 'separator' },
+              { role: 'quit' }
+            ] satisfies Electron.MenuItemConstructorOptions[]))
       ]
     },
+    // macOS only routes copy, paste and undo shortcuts in text fields through an Edit menu.
+    ...(isMac ? [{ role: 'editMenu' } satisfies Electron.MenuItemConstructorOptions] : []),
     {
       label: 'View',
       submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }]
-    }
+    },
+    ...(isMac ? [{ role: 'windowMenu' } satisfies Electron.MenuItemConstructorOptions] : [])
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
@@ -186,8 +221,8 @@ function registerIpc(): void {
   })
 
   // The renderer asks once on startup for a file the app was launched with.
-  let launchPath = midiPathFromArgs(process.argv)
   ipcMain.handle(IpcChannels.takeLaunchFile, async () => {
+    rendererListening = true
     const path = launchPath
     launchPath = undefined
     return path ? loadMidiFile(path) : null
@@ -249,6 +284,7 @@ function registerIpc(): void {
 }
 
 function createWindow(): void {
+  rendererListening = false
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -277,20 +313,40 @@ function midiPathFromArgs(argv: string[]): string | undefined {
   return argv.slice(1).find((arg) => !arg.startsWith('--') && MIDI_EXTENSION.test(arg))
 }
 
+/** Opens a file the system handed to the running app (Explorer, Finder, file manager). */
+async function openFromSystem(path: string): Promise<void> {
+  if (!mainWindow || !rendererListening) {
+    // The page picks it up as its launch file once it has loaded.
+    launchPath = path
+    if (app.isReady() && !mainWindow) createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.focus()
+  try {
+    mainWindow.webContents.send(IpcChannels.openFile, await loadMidiFile(path))
+  } catch (err) {
+    dialog.showErrorBox('Could not open file', err instanceof Error ? err.message : String(err))
+  }
+}
+
+// macOS hands over files (double-clicked in Finder, dropped on the Dock icon) with this event,
+// also at launch, before the app is ready.
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  void openFromSystem(path)
+})
+
 // One window: opening another MIDI file from Explorer loads it into the running app.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', async (_event, argv) => {
-    if (!mainWindow) return
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
+  app.on('second-instance', (_event, argv) => {
     const path = midiPathFromArgs(argv)
-    if (!path) return
-    try {
-      mainWindow.webContents.send(IpcChannels.openFile, await loadMidiFile(path))
-    } catch (err) {
-      dialog.showErrorBox('Could not open file', err instanceof Error ? err.message : String(err))
+    if (path) void openFromSystem(path)
+    else if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
     }
   })
 

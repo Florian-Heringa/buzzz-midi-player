@@ -4,6 +4,7 @@
   "description": "Electron MIDI player for practicing vocal parts",
   "main": "./out/main/index.js",
   "author": "Florian Heringa",
+  "homepage": "https://github.com/Florian-Heringa/electron-midi-player",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -13,11 +14,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "lint": "eslint .",
-    "build:win": "electron-vite build && electron-builder --win",
+    "build:win": "electron-vite build && electron-builder --win --publish never",
+    "build:mac": "electron-vite build && electron-builder --mac --publish never",
+    "build:linux": "electron-vite build && electron-builder --linux --publish never",
     "fetch-soundfont": "node scripts/fetch-soundfont.mjs",
     "make-samples": "node scripts/make-samples.mjs",
     "smoke": "electron-vite build && node scripts/drive.mjs",
-    "build:dir": "electron-vite build && electron-builder --win --dir"
+    "build:dir": "electron-vite build && electron-builder --dir --publish never"
   },
   "dependencies": {
     "js-synthesizer": "^1.13.0"
