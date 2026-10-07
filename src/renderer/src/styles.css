@@ -796,7 +796,10 @@ select {
   background: var(--panel);
   color: var(--text);
   box-shadow: var(--shadow-dialog);
+  /* Rendered inside the one-line song details: undo what it would inherit from there. */
   font-family: var(--font);
+  font-size: 1rem;
+  white-space: normal;
 }
 
 .key-picker__panel fieldset {
@@ -811,6 +814,13 @@ select {
 
 .key-picker__panel legend {
   padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.key-picker__note {
+  max-width: 300px;
+  margin: 0 0 4px;
   color: var(--muted);
   font-size: 0.85rem;
 }

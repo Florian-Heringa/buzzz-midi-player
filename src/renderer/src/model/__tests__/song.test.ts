@@ -94,10 +94,18 @@ describe('parseSong', () => {
     expect(parseSong(data, 'x.mid').tracks[0].program).toBe(19)
   })
 
-  it('defaults to 4/4 in C major and 120 BPM', () => {
+  it('defaults to 4/4 and 120 BPM, estimating the key when the file has none', () => {
     const song = parseSong(buildMidi([note(0, 60, 480)]), 'x.mid')
     expect(song.timeSignatures).toEqual([{ tick: 0, numerator: 4, denominator: 4 }])
-    expect(song.keySignatures).toEqual([{ tick: 0, fifths: 0, mode: 'major' }])
+    expect(song.keySignatures).toEqual([{ tick: 0, fifths: 0, mode: 'major', estimated: true }])
     expect(song.tempoMap.bpmAt(0)).toBe(120)
+  })
+
+  it('keeps the key signature from the file', () => {
+    const song = parseSong(
+      buildMidi([[{ tick: 0, type: 'keySignature', key: 0, scale: 0, meta: true }, ...note(0, 61, 480)]]),
+      'x.mid'
+    )
+    expect(song.keySignatures).toEqual([{ tick: 0, fifths: 0, mode: 'major' }])
   })
 })

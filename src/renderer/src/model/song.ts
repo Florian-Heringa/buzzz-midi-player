@@ -1,5 +1,6 @@
 import { parseMidi, type MidiEvent } from 'midi-file'
 import { DRUM_CHANNEL, gmProgramName } from './gm'
+import { estimateKey } from './keyEstimate'
 import { TempoMap, type TempoEvent } from './tempoMap'
 
 export interface Note {
@@ -34,6 +35,8 @@ export interface KeySignature {
   /** Number of sharps (positive) or flats (negative), -7..7. */
   fifths: number
   mode: 'major' | 'minor'
+  /** True when the file has no key signature and this one was estimated from the notes. */
+  estimated?: boolean
 }
 
 export interface Song {
@@ -168,9 +171,19 @@ export function parseSong(data: ArrayLike<number>, name: string): Song {
     durationTicks,
     tempoMap: new TempoMap(ppq, tempos),
     timeSignatures: normalizeByTick(timeSignatures, { tick: 0, numerator: 4, denominator: 4 }),
-    keySignatures: normalizeByTick(keySignatures, { tick: 0, fifths: 0, mode: 'major' }),
+    keySignatures: resolveKeySignatures(keySignatures, tracks),
     tracks
   }
+}
+
+/**
+ * The file's key signatures; when it has none (common in exported MIDI), the key is
+ * estimated from the notes instead of assuming C major.
+ */
+function resolveKeySignatures(fromFile: KeySignature[], tracks: Track[]): KeySignature[] {
+  if (fromFile.length > 0) return normalizeByTick(fromFile, { tick: 0, fifths: 0, mode: 'major' })
+  const estimate = estimateKey(tracks)
+  return [estimate ? { tick: 0, ...estimate, estimated: true } : { tick: 0, fifths: 0, mode: 'major' }]
 }
 
 /** One Track per (source track, channel) that has notes; multi-channel tracks are split. */

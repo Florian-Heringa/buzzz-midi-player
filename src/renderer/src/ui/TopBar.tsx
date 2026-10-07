@@ -174,7 +174,11 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
         onClick={toggle}
         aria-haspopup="true"
         aria-expanded={open}
-        title="Change how the key is read"
+        title={
+          fileKey.estimated
+            ? 'Key estimated from the notes (the file has none). Click to change how it is read.'
+            : 'Change how the key is read'
+        }
       >
         {name}
         <span aria-hidden> ▾</span>
@@ -183,6 +187,9 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
         <div ref={panel} className="key-picker__panel" role="dialog" aria-label="Key" style={position}>
           <fieldset>
             <legend>Read the key as</legend>
+            {fileKey.estimated && (
+              <p className="key-picker__note">This file has no key signature, so the key was estimated from the notes.</p>
+            )}
             {KEY_OPTIONS.map((option) => {
               const fifths = enharmonicFifths(fileKey.fifths, option.accidentals)
               const isFileKey = option.accidentals === fromFile.accidentals && option.mode === fromFile.mode
@@ -197,7 +204,7 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
                   <span className="key-picker__label">{option.label}</span>
                   <span className="key-picker__result">
                     {keyName(fifths, option.mode)}
-                    {isFileKey && <small> (file)</small>}
+                    {isFileKey && <small> ({fileKey.estimated ? 'estimated' : 'file'})</small>}
                   </span>
                 </label>
               )
