@@ -165,6 +165,35 @@ try {
       } else {
         console.log(`info  ${theme} ${mode} contrast below 4.5: ${low.map(([n, v]) => `${n}: ${v}`).join('; ') || 'none'}`)
       }
+      if (theme === 'oldschool' || theme === 'retro') {
+        const clipped = await page.locator('.song-summary').evaluate((el) => el.scrollWidth > el.clientWidth + 1)
+        check(`${theme} ${mode}: song details are not cut off`, !clipped)
+      }
+      if (theme === 'classic' && mode === 'dark') {
+        // Notes are graphics: WCAG asks 3:1 against what is behind them.
+        const notes = await page.evaluate(() => {
+          const toRgb = (c) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((n) => (c.startsWith('color(') ? n : n / 255))
+          const lum = (rgb) => rgb.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0)
+          const ratio = (a, b) => {
+            const [hi, lo] = [lum(toRgb(a)), lum(toRgb(b))].sort((x, y) => y - x)
+            return (hi + 0.05) / (lo + 0.05)
+          }
+          const bg = getComputedStyle(document.querySelector('.staff-view')).backgroundColor
+          const head = getComputedStyle(document.querySelector('.staff__notehead:not(.staff__notehead--sounding)')).fill
+          // The bar is translucent: blend it over the background to get what is seen.
+          const bar = getComputedStyle(document.querySelector('.staff__duration')).fill
+          const [r, g, b, a = 1] = (bar.match(/[\d.]+/g) ?? []).map(Number)
+          const scale = bar.startsWith('color(') ? 255 : 1
+          const [br, bgG, bb] = (bg.match(/[\d.]+/g) ?? []).map(Number)
+          const seen = `rgb(${r * scale * a + br * (1 - a)}, ${g * scale * a + bgG * (1 - a)}, ${b * scale * a + bb * (1 - a)})`
+          return { head: ratio(head, bg), bar: ratio(seen, bg) }
+        })
+        check(
+          'classic dark: notes stand out from the staff',
+          notes.head >= 3 && notes.bar >= 3,
+          `notehead ${notes.head.toFixed(1)}:1, duration bar ${notes.bar.toFixed(1)}:1`
+        )
+      }
       await page.screenshot({ path: resolve(SHOT_DIR, `theme-${theme}-${mode}.png`) })
     }
   }
@@ -311,6 +340,20 @@ try {
   await page.mouse.up()
   const dragged = Number(await volumeKnob.getAttribute('aria-valuenow'))
   check('dragging a knob up raises it', dragged > 120, `value ${dragged}`)
+  // Turning pan changes its readout ("Pan C" → "Pan L100") without moving anything else.
+  const mixerLayout = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.strip, .knob__dial, .strip__meter')].map((el) => {
+        const box = el.getBoundingClientRect()
+        return [box.left, box.width].map(Math.round).join(':')
+      })
+    )
+  const layoutBeforePan = await mixerLayout()
+  const panKnobForLayout = page.locator('[role="slider"][aria-label$=" pan"]').first()
+  await panKnobForLayout.focus()
+  await page.keyboard.press('Home')
+  check('turning a pan knob does not move other controls', JSON.stringify(await mixerLayout()) === JSON.stringify(layoutBeforePan))
+  await panKnobForLayout.dblclick()
   await volumeKnob.dblclick()
   check('double-click resets a knob', (await volumeKnob.getAttribute('aria-valuenow')) === '100')
 

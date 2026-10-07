@@ -521,7 +521,7 @@ select {
 
 .strip__knobs {
   display: flex;
-  justify-content: space-around;
+  justify-content: space-between;
 }
 
 .strip .strip__meter {
@@ -546,11 +546,13 @@ select {
 
 /* ---- Knob ---- */
 
+/* Fixed width: the value text changes length ("Pan C", "Pan L23") without moving anything. */
 .knob {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  width: 54px;
 }
 
 .knob__dial {
@@ -592,10 +594,14 @@ select {
 }
 
 .knob__text {
+  width: 100%;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .strip__toggles {

@@ -65,6 +65,21 @@
   --track-color: var(--accent);
 }
 
+/* Classic dark: notes in the theme's blue, so they stand out on the dark staff. */
+:root[data-theme='classic'][data-mode='dark'] .staff-pane {
+  --note-duration: var(--accent);
+  --note-sounding: #ffffff;
+  --notehead: #a9c1ff;
+}
+
+:root[data-theme='classic'][data-mode='dark'] .staff__notehead:not(.staff__notehead--sounding) {
+  fill: var(--notehead);
+}
+
+:root[data-theme='classic'][data-mode='dark'] .sheet-view .sheet-note:not(.sheet-note--sounding) {
+  color: var(--notehead);
+}
+
 /* ---- Modern: colorful, rounded, soft depth ---- */
 
 :root[data-theme='modern'] {
@@ -549,4 +564,21 @@
 
 :root:is([data-theme='oldschool'], [data-theme='retro']) .staff-view__scroller {
   scrollbar-color: var(--staff-line) var(--staff-bg);
+}
+
+/* ---- Song details on their own row where the lettering is wide ---- */
+
+/*
+ * Old School and Retro use wide LCD/monospace lettering, so the song details get a full-width
+ * second row in the header instead of being cut off. It is always there (not wrapped on
+ * demand), so items appearing in the first row never move it.
+ */
+:root:is([data-theme='oldschool'], [data-theme='retro']) .top-bar__row--fixed {
+  flex-wrap: wrap;
+}
+
+:root:is([data-theme='oldschool'], [data-theme='retro']) .top-bar__row--fixed > .song-summary {
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  order: 1;
 }
