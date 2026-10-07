@@ -1,0 +1,55 @@
+import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { getSettings, MAX_ZOOM, MIN_ZOOM, updateSettings } from '../ui/settings'
+
+/** Zoom change per pixel of wheel movement (exponential, so each notch scales by the same %). */
+const ZOOM_PER_PIXEL = 0.0015
+
+/** A spot to keep in place across a zoom: this tick stays under this x (px from the view's left). */
+export interface ZoomAnchor {
+  tick: number
+  offset: number
+}
+
+/**
+ * Vertical wheel over the note display zooms it horizontally, keeping the music under the
+ * mouse in place. Horizontal scrolling (shift+wheel, touchpad swipe) still scrolls.
+ *
+ * `tickAt` maps a view x (px from the scroller's left edge, scroll included) to a tick. The
+ * returned function hands out the anchor to restore once the view has been laid out at the
+ * new zoom (null when the zoom didn't come from the wheel), clearing it.
+ */
+export function useWheelZoom(
+  scroller: RefObject<HTMLDivElement | null>,
+  tickAt: (x: number) => number | null
+): () => ZoomAnchor | null {
+  const anchor = useRef<ZoomAnchor | null>(null)
+  const tickAtRef = useRef(tickAt)
+  useEffect(() => {
+    tickAtRef.current = tickAt
+  })
+
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const onWheel = (event: WheelEvent): void => {
+      if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.deltaY === 0) return
+      event.preventDefault()
+      const offset = event.clientX - el.getBoundingClientRect().left
+      const tick = tickAtRef.current(el.scrollLeft + offset)
+      // Keep the first anchor of a burst of wheel events: the spot the user started on.
+      if (tick !== null && !anchor.current) anchor.current = { tick, offset }
+      const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY
+      const zoom = getSettings().zoom * Math.exp(-pixels * ZOOM_PER_PIXEL)
+      // Not rounded, so small touchpad steps add up.
+      updateSettings({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [scroller])
+
+  return useCallback(() => {
+    const taken = anchor.current
+    anchor.current = null
+    return taken
+  }, [])
+}

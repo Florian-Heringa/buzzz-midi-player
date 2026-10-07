@@ -10,11 +10,14 @@ import {
   StaveConnector,
   StaveNote,
   StaveTie,
-  Voice
+  VexFlow,
+  Voice,
+  type TickContext
 } from 'vexflow/bravura'
 import type { Song, Track } from '../../model/song'
 import { trackDisplayName, useAppStore } from '../../store/appStore'
-import { useSettings } from '../../ui/settings'
+import { DEFAULT_SETTINGS, useSettings } from '../../ui/settings'
+import { useWheelZoom } from '../useWheelZoom'
 import type { Clef } from '../staffLayout'
 import { buildSheet, UNITS_PER_QUARTER, type Sheet, type SheetEvent } from './sheetModel'
 
@@ -55,7 +58,9 @@ type Anchor = [tick: number, x: number]
 
 interface Rendered {
   width: number
-  /** Sorted by tick (and so by x: positions only move right as time goes on). */
+  /** Drawing size relative to its coordinates (below 1 when zoomed out). */
+  visualScale: number
+  /** Start and end of every bar; time runs linearly between them. */
   anchors: Anchor[]
   notes: { start: number; end: number; el: SVGElement }[]
   /** y range covered by the staves, for the playhead line. */
@@ -63,50 +68,53 @@ interface Rendered {
   bottom: number
 }
 
-/** Draws the sheet into `container` (an empty div) and returns what playback needs. */
-function renderSheet(container: HTMLDivElement, sheet: Sheet, pxPerUnit: number): Rendered {
-  const renderer = new Renderer(container, Renderer.Backends.SVG)
-  const context = renderer.getContext()
-  // Everything in currentColor so the theme's CSS decides the colors.
-  context.setFillStyle('currentColor')
-  context.setStrokeStyle('currentColor')
+/** A bar prepared for drawing: notes, voices and beams, plus where its beats are. */
+interface PreparedMeasure {
+  staffNotes: StaveNote[][]
+  voices: Voice[]
+  beams: Beam[]
+  formatter: Formatter
+  /** Beat positions (grid units from the bar start) and their tick contexts. */
+  contexts: { units: number; context: TickContext }[]
+  units: number
+  timeSig: string
+}
 
+/** VexFlow ticks per grid unit (a sixteenth). */
+const VEX_TICKS_PER_UNIT = VexFlow.RESOLUTION / (4 * UNITS_PER_QUARTER)
+/**
+ * Share of bars whose spacing need sets the song-wide scale. The busiest few bars above it get
+ * extra width of their own rather than stretching the whole song.
+ */
+const SCALE_PERCENTILE = 0.9
+/** Spacing per sixteenth at 100% zoom when the notes need no more (as in the piano roll). */
+const BASE_PX_PER_UNIT = 20
+/** Space kept between neighbouring notes, and after the barline before the first note. */
+const NOTE_GAP = 6
+const MIN_LEAD = 12
+
+/**
+ * Draws the sheet into `container` (an empty div) and returns what playback needs.
+ *
+ * Notes are placed in proportion to time (x = start + ticks × scale), so the playhead and
+ * following move at a constant speed. At 100% zoom the scale is the tightest that keeps the
+ * notes clear (say sixteenths with accidentals) in nearly all bars; the busiest few bars are
+ * widened individually so they don't stretch the whole song. Zooming in spreads the notes;
+ * zooming out shrinks the whole drawing, symbols included.
+ */
+function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number): Rendered {
   const clefs = sheet.clefs.map(clefInfo)
-  const staffYs = sheet.clefs.map((_, i) => STAVE_TOP + i * GRAND_STAFF_GAP)
-  const anchors: Anchor[] = []
-  const notes: Rendered['notes'] = []
-  const ties: { first: StaveNote; last: StaveNote; count: number }[] = []
-  const pendingTie: (StaveNote | null)[] = sheet.clefs.map(() => null)
 
-  let x = drawingLeft(sheet)
-  let previous = { fifths: NaN, timeSig: '' }
-  // Vertical extent of what is drawn: staff lines, then widened by notes, stems and beams.
-  const lineTop = new Stave(0, staffYs[0], 10).getYForLine(0)
-  const lineBottom = new Stave(0, staffYs[staffYs.length - 1], 10).getYForLine(4)
-  let minY = lineTop - 28 // measure numbers
-  let maxY = lineBottom + 16
-
-  for (const measure of sheet.measures) {
+  // Pass 1: build every bar and measure how much room its notes need.
+  const prepared: PreparedMeasure[] = sheet.measures.map((measure) => {
     const timeSig = `${measure.numerator}/${measure.denominator}`
-    const first = measure.index === 0
-
-    // Staves with the modifiers this bar needs (clef only at the start).
-    const staves = staffYs.map((y, staff) => {
-      const stave = new Stave(x, y, 100)
-      if (first) stave.addClef(clefs[staff].name, undefined, clefs[staff].annotation)
-      if (measure.fifths !== previous.fifths) stave.addKeySignature(KEY_SPECS[measure.fifths + 7])
-      if (timeSig !== previous.timeSig) stave.addTimeSignature(timeSig)
-      if (staff === 0) stave.setMeasure(measure.index + 1)
-      return stave
-    })
-    previous = { fifths: measure.fifths, timeSig }
-
-    // Notes and voices.
     const staffNotes = measure.staves.map((events, staff) =>
       events.map((event) => makeNote(event, sheet.clefs[staff], clefs[staff].octaveShift))
     )
     const voices = staffNotes.map((list) =>
-      new Voice({ numBeats: measure.numerator, beatValue: measure.denominator }).setMode(Voice.Mode.SOFT).addTickables(list)
+      new Voice({ numBeats: measure.numerator, beatValue: measure.denominator })
+        .setMode(Voice.Mode.SOFT)
+        .addTickables(list)
     )
     const beams = staffNotes.flatMap((list) =>
       Beam.generateBeams(
@@ -114,37 +122,112 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, pxPerUnit: number)
         { groups: Beam.getDefaultBeamGroups(timeSig) }
       )
     )
-
     const formatter = new Formatter()
     voices.forEach((voice) => formatter.joinVoices([voice]))
-    const minWidth = formatter.preCalculateMinTotalWidth(voices)
+    formatter.format(voices) // measures notes and creates the beat positions
+    const tickContexts = formatter.getTickContexts()!
+    const contexts = tickContexts.list.map((tick) => ({
+      units: tick / tickContexts.resolutionMultiplier / VEX_TICKS_PER_UNIT,
+      context: tickContexts.map[tick]
+    }))
     const units = (measure.endTick - measure.startTick) / sheet.unitTicks
-    const contentWidth = Math.max(minWidth + 24, units * pxPerUnit)
-    // All staves of the bar start their notes at the same x.
-    const noteStart = Math.max(...staves.map((s) => s.getNoteStartX()))
-    const width = noteStart - x + contentWidth
-    staves.forEach((stave) => {
-      stave.setWidth(width)
-      stave.setNoteStartX(noteStart)
-    })
-    formatter.format(voices, contentWidth - 16)
+    return { staffNotes, voices, beams, formatter, contexts, units, timeSig }
+  })
 
-    // Draw.
+  // Room before a bar's first note (for its accidentals) and the scale that fits every bar.
+  const lead = Math.max(
+    MIN_LEAD,
+    ...prepared.map((bar) => (bar.contexts[0]?.context.getMetrics().modLeftPx ?? 0) + NOTE_GAP)
+  )
+  // The scale each bar needs so its notes don't collide.
+  const barNeeds = prepared.map((bar) => {
+    let need = 0
+    bar.contexts.forEach(({ units, context }, i) => {
+      const metrics = context.getMetrics()
+      const rightOfNote = metrics.width - metrics.modLeftPx
+      const next = bar.contexts[i + 1]
+      // To the next note; the last note only has to clear the barline (the next bar's first
+      // note sits `lead` past it).
+      const room = next
+        ? rightOfNote + next.context.getMetrics().modLeftPx + NOTE_GAP
+        : rightOfNote + lead + 2
+      const span = (next ? next.units : bar.units) - units
+      if (span > 0) need = Math.max(need, room / span)
+    })
+    return need
+  })
+  const sortedNeeds = [...barNeeds].sort((a, b) => a - b)
+  const typicalNeed = sortedNeeds[Math.floor((sortedNeeds.length - 1) * SCALE_PERCENTILE)] ?? 0
+  const songScale = Math.max(BASE_PX_PER_UNIT, typicalNeed) * Math.max(1, zoomFactor)
+  const visualScale = Math.min(1, zoomFactor)
+  const barScales = barNeeds.map((need) => Math.max(songScale, need))
+
+  // Pass 2: place everything by time and draw.
+  const renderer = new Renderer(container, Renderer.Backends.SVG)
+  const context = renderer.getContext()
+  // Everything in currentColor so the theme's CSS decides the colors.
+  context.setFillStyle('currentColor')
+  context.setStrokeStyle('currentColor')
+
+  const staffYs = sheet.clefs.map((_, i) => STAVE_TOP + i * GRAND_STAFF_GAP)
+  const anchors: Anchor[] = []
+  const notes: Rendered['notes'] = []
+  const ties: { first: StaveNote; last: StaveNote; count: number }[] = []
+  const pendingTie: (StaveNote | null)[] = sheet.clefs.map(() => null)
+  // Vertical extent of what is drawn: staff lines, then widened by notes and stems.
+  const lineTop = new Stave(0, staffYs[0], 10).getYForLine(0)
+  const lineBottom = new Stave(0, staffYs[staffYs.length - 1], 10).getYForLine(4)
+  let minY = lineTop - 28 // measure numbers
+  let maxY = lineBottom + 16
+
+  let x = drawingLeft(sheet)
+  let previous = { fifths: NaN, timeSig: '' }
+  sheet.measures.forEach((measure, m) => {
+    const bar = prepared[m]
+    const scale = barScales[m]
+    const first = m === 0
+
+    // Staves with the modifiers this bar needs (clef only at the start).
+    const staves = staffYs.map((y, staff) => {
+      const stave = new Stave(x, y, 100)
+      if (first) stave.addClef(clefs[staff].name, undefined, clefs[staff].annotation)
+      if (measure.fifths !== previous.fifths) stave.addKeySignature(KEY_SPECS[measure.fifths + 7])
+      if (bar.timeSig !== previous.timeSig) stave.addTimeSignature(bar.timeSig)
+      if (staff === 0) stave.setMeasure(measure.index + 1)
+      return stave
+    })
+    previous = { fifths: measure.fifths, timeSig: bar.timeSig }
+    const noteStart = Math.max(...staves.map((s) => s.getNoteStartX()))
+    const width = noteStart - x + bar.units * scale
+    staves.forEach((stave) => stave.setWidth(width).setNoteStartX(noteStart))
+
+    // Beats at their time position; a whole-bar rest centred in the bar.
+    for (const { units, context: tickContext } of bar.contexts) {
+      tickContext.setX(lead + units * scale)
+    }
+    measure.staves.forEach((events, staff) => {
+      if (events.length === 1 && events[0].fullBar) {
+        const rest = bar.staffNotes[staff][0]
+        const tickContext = rest.getTickContext()
+        tickContext.setX((bar.units * scale) / 2 - tickContext.getMetrics().width / 2)
+      }
+    })
+    bar.voices.forEach((voice, staff) => voice.setStave(staves[staff]))
+    bar.formatter.postFormat()
+
     staves.forEach((stave) => stave.setContext(context).draw())
     if (staves.length === 2) {
-      const brace = new StaveConnector(staves[0], staves[1])
-      brace.setType(first ? 'brace' : 'singleLeft').setContext(context).draw()
+      new StaveConnector(staves[0], staves[1]).setType(first ? 'brace' : 'singleLeft').setContext(context).draw()
       new StaveConnector(staves[0], staves[1]).setType('singleRight').setContext(context).draw()
     }
-    voices.forEach((voice, staff) => voice.draw(context, staves[staff]))
-    beams.forEach((beam) => beam.setContext(context).draw())
+    bar.voices.forEach((voice, staff) => voice.draw(context, staves[staff]))
+    bar.beams.forEach((beam) => beam.setContext(context).draw())
 
-    // Remember positions and elements for playback, and ties to draw at the end.
-    anchors.push([measure.startTick, noteStart])
+    // Time runs linearly through the bar: from its start beat to the next bar's.
+    anchors.push([measure.startTick, noteStart + lead], [measure.endTick, noteStart + lead + bar.units * scale])
     measure.staves.forEach((events, staff) =>
       events.forEach((event, i) => {
-        const note = staffNotes[staff][i]
-        if (!event.fullBar) anchors.push([event.tick, note.getAbsoluteX()])
+        const note = bar.staffNotes[staff][i]
         if (!event.rest) {
           const ys = note.getYs()
           minY = Math.min(minY, ...ys.map((y) => y - 14)) // room for accidentals and ties
@@ -154,11 +237,11 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, pxPerUnit: number)
             minY = Math.min(minY, stem.topY - 6, stem.baseY - 6)
             maxY = Math.max(maxY, stem.topY + 6, stem.baseY + 6)
           }
-        }
-        const el = note.getSVGElement()
-        if (el && !event.rest) {
-          el.classList.add('sheet-note')
-          notes.push({ start: event.tick, end: event.tick + event.units * sheet.unitTicks, el })
+          const el = note.getSVGElement()
+          if (el) {
+            el.classList.add('sheet-note')
+            notes.push({ start: event.tick, end: event.tick + event.units * sheet.unitTicks, el })
+          }
         }
         const waiting = pendingTie[staff]
         if (waiting && !event.rest) ties.push({ first: waiting, last: note, count: event.pitches.length })
@@ -166,8 +249,7 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, pxPerUnit: number)
       })
     )
     x += width
-    anchors.push([measure.endTick, x])
-  }
+  })
 
   // Ties last: they can join notes in different bars.
   for (const { first, last, count } of ties) {
@@ -177,27 +259,19 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, pxPerUnit: number)
       .draw()
   }
 
-  const width = x + 10
+  const width = x + lead + 10
   renderer.resize(width, STAVE_TOP + (sheet.clefs.length - 1) * GRAND_STAFF_GAP + 120)
   const svg = container.querySelector('svg')!
   // Fit to the computed extent. (getBBox can't be used: music glyphs are text whose boxes
   // span the font's full line height, far beyond the visible symbol.)
-  const top = minY
   const height = maxY - minY
-  svg.setAttribute('viewBox', `0 ${top} ${width} ${height}`)
-  svg.setAttribute('height', String(height))
-  svg.style.height = `${height}px`
+  svg.setAttribute('viewBox', `0 ${minY} ${width} ${height}`)
+  svg.setAttribute('width', String(width * visualScale))
+  svg.setAttribute('height', String(height * visualScale))
+  svg.style.width = `${width * visualScale}px`
+  svg.style.height = `${height * visualScale}px`
 
-  // Keep x rising with time (staves of a grand staff can place the same beat slightly apart).
-  anchors.sort((a, b) => a[0] - b[0] || a[1] - b[1])
-  for (let i = 1; i < anchors.length; i++) anchors[i][1] = Math.max(anchors[i][1], anchors[i - 1][1])
-  return {
-    width,
-    anchors,
-    notes,
-    top: lineTop - 14,
-    bottom: lineBottom + 14
-  }
+  return { width, visualScale, anchors, notes, top: lineTop - 14, bottom: lineBottom + 14 }
 }
 
 function makeNote(event: SheetEvent, clef: Clef, octaveShift: number): StaveNote {
@@ -208,8 +282,7 @@ function makeNote(event: SheetEvent, clef: Clef, octaveShift: number): StaveNote
       keys: [vexClef === 'bass' ? 'd/3' : 'b/4'],
       duration: event.fullBar ? 'wr' : `${duration}r`,
       dots: event.fullBar ? 0 : dots,
-      clef: vexClef,
-      alignCenter: event.fullBar
+      clef: vexClef
     }).addClass('sheet-rest') as StaveNote
   }
   const keys = event.pitches.map((p) => `${'cdefgab'[p.step % 7]}/${Math.floor(p.step / 7) - 1 + octaveShift}`)
@@ -249,6 +322,11 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
   const header = useRef<HTMLDivElement>(null)
   const [rendered, setRendered] = useState<Rendered | null>(null)
   const [fontReady, setFontReady] = useState(false)
+  const renderedRef = useRef<Rendered | null>(null)
+  const takeZoomAnchor = useWheelZoom(scroller, (px) => {
+    const current = renderedRef.current
+    return current ? interpolate(current.anchors, px / current.visualScale, 1) : null
+  })
 
   // VexFlow measures with the music font, so it has to be loaded first.
   useEffect(() => {
@@ -259,14 +337,35 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
     }
   }, [])
 
+  // Drawing a whole song takes a moment, so zoom changes (a burst while wheeling) are drawn
+  // once they settle; a new song, track or key is drawn straight away.
+  const drawnSheet = useRef<Sheet | null>(null)
   useEffect(() => {
     const el = drawing.current
     if (!el || !fontReady) return
-    el.replaceChildren()
-    const result = renderSheet(el, sheet, zoom / UNITS_PER_QUARTER)
-    setRendered(result)
-    if (header.current) renderHeader(header.current, sheet, el.querySelector('svg')!)
-  }, [sheet, zoom, fontReady])
+    const draw = (): void => {
+      el.replaceChildren()
+      const result = renderSheet(el, sheet, zoom / DEFAULT_SETTINGS.zoom)
+      drawnSheet.current = sheet
+      renderedRef.current = result
+      setRendered(result)
+      if (header.current) renderHeader(header.current, sheet, el.querySelector('svg')!, result.visualScale)
+
+      // Keep the spot under the mouse (wheel zoom) or bring the playhead into view.
+      const view = scroller.current
+      if (!view) return
+      const anchor = takeZoomAnchor()
+      const tick = anchor?.tick ?? useAppStore.getState().positionTick
+      const x = interpolate(result.anchors, tick, 0) * result.visualScale
+      if (anchor) view.scrollLeft = x - anchor.offset
+      else if (tick > 0) view.scrollLeft = x - view.clientWidth * FOLLOW_POSITION
+    }
+    if (drawnSheet.current === sheet) {
+      const timer = setTimeout(draw, 90)
+      return () => clearTimeout(timer)
+    }
+    draw()
+  }, [sheet, zoom, fontReady, takeZoomAnchor])
 
   // Back to the start when switching track or song.
   useEffect(() => {
@@ -293,7 +392,9 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
       now.forEach((el) => el.classList.add('sheet-note--sounding'))
       sounding = now
       const el = scroller.current
-      if (playing && followPlayhead && el) el.scrollLeft = x - el.clientWidth * FOLLOW_POSITION
+      if (playing && followPlayhead && el) {
+        el.scrollLeft = x * rendered.visualScale - el.clientWidth * FOLLOW_POSITION
+      }
     }
     const state = useAppStore.getState()
     update(state.positionTick, false)
@@ -340,7 +441,12 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
 }
 
 /** Clef and key signature pinned to the left edge, matching the drawing's scale and offset. */
-function renderHeader(container: HTMLDivElement, sheet: Sheet, drawing: SVGSVGElement): void {
+function renderHeader(
+  container: HTMLDivElement,
+  sheet: Sheet,
+  drawing: SVGSVGElement,
+  visualScale: number
+): void {
   container.replaceChildren()
   const first = sheet.measures[0]
   if (!first) return
@@ -371,5 +477,8 @@ function renderHeader(container: HTMLDivElement, sheet: Sheet, drawing: SVGSVGEl
   renderer.resize(width, viewBox[3])
   const svg = container.querySelector('svg')!
   svg.setAttribute('viewBox', `0 ${viewBox[1]} ${width} ${viewBox[3]}`)
-  svg.style.height = `${viewBox[3]}px`
+  svg.setAttribute('width', String(width * visualScale))
+  svg.setAttribute('height', String(viewBox[3] * visualScale))
+  svg.style.width = `${width * visualScale}px`
+  svg.style.height = `${viewBox[3] * visualScale}px`
 }

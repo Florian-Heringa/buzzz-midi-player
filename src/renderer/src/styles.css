@@ -338,6 +338,35 @@ select {
   font-size: 1.2rem;
 }
 
+/* Zoom follows the Solo part / Mute part buttons, set apart by a divider. */
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.zoom-control__label {
+  color: var(--muted);
+}
+
+.zoom-control button {
+  min-width: 30px;
+  padding: 2px 8px;
+}
+
+.zoom-control input {
+  width: 120px;
+}
+
+.zoom-control__value {
+  min-width: 44px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 /* The practice track's color (Modern theme). */
 .practice-header__swatch {
   width: 12px;

@@ -2,9 +2,6 @@ import { useEffect, useRef } from 'react'
 import { useAppStore } from '../store/appStore'
 import {
   CHANNEL_TRACK_OPTIONS,
-  DEFAULT_SETTINGS,
-  MAX_ZOOM,
-  MIN_ZOOM,
   NOTE_DISPLAYS,
   updateSettings,
   useSettings
@@ -37,6 +34,13 @@ export function SettingsDialog(): React.JSX.Element | null {
       onCancel={(e) => {
         e.preventDefault()
         close()
+      }}
+      // A click on the backdrop (outside the dialog's box) closes it.
+      onPointerDown={(e) => {
+        const box = e.currentTarget.getBoundingClientRect()
+        const inside =
+          e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom
+        if (!inside) close()
       }}
     >
       <h2 id="settings-title">Settings</h2>
@@ -101,26 +105,6 @@ export function SettingsDialog(): React.JSX.Element | null {
             </label>
           ))}
         </fieldset>
-
-        <label
-          className="settings-dialog__row"
-          onDoubleClick={() => updateSettings({ zoom: DEFAULT_SETTINGS.zoom })}
-          title="Double-click to reset"
-        >
-          <span>Horizontal zoom</span>
-          <input
-            type="range"
-            min={MIN_ZOOM}
-            max={MAX_ZOOM}
-            step={10}
-            value={settings.zoom}
-            onChange={(e) => updateSettings({ zoom: Number(e.target.value) })}
-            aria-valuetext={`${Math.round((settings.zoom / DEFAULT_SETTINGS.zoom) * 100)}%`}
-          />
-          <span className="settings-dialog__value">
-            {Math.round((settings.zoom / DEFAULT_SETTINGS.zoom) * 100)}%
-          </span>
-        </label>
 
         <fieldset>
           <legend>MIDI tracks with several channels</legend>

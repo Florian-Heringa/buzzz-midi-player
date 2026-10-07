@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import type { Song, Track } from '../model/song'
 import { trackDisplayName, useAppStore } from '../store/appStore'
 import { useSettings } from '../ui/settings'
+import { useWheelZoom } from './useWheelZoom'
 import { layoutStaff, type Accidental, type Clef, type StaffLayout } from './staffLayout'
 
 // U+FE0E requests the text (not emoji) presentation, which Windows otherwise draws in color.
@@ -29,14 +30,21 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
     if (scroller.current) scroller.current.scrollLeft = 0
   }, [song.tracks, track])
 
-  // After zooming, bring the playhead back into view.
+  // Wheel zoom keeps the music under the mouse in place.
+  const takeZoomAnchor = useWheelZoom(scroller, (x) => (x - layout.originX) / layout.pxPerTick)
+
+  // After zooming: keep the spot under the mouse (wheel) or bring the playhead into view.
   useEffect(() => {
     const el = scroller.current
-    const tick = useAppStore.getState().positionTick
-    if (el && tick > 0) {
-      el.scrollLeft = layout.originX + tick * layout.pxPerTick - el.clientWidth * FOLLOW_POSITION
+    if (!el) return
+    const anchor = takeZoomAnchor()
+    if (anchor) {
+      el.scrollLeft = layout.originX + anchor.tick * layout.pxPerTick - anchor.offset
+      return
     }
-  }, [layout])
+    const tick = useAppStore.getState().positionTick
+    if (tick > 0) el.scrollLeft = layout.originX + tick * layout.pxPerTick - el.clientWidth * FOLLOW_POSITION
+  }, [layout, takeZoomAnchor])
 
   // Keep the playhead in view while playing (store subscription: no re-render needed).
   useEffect(() => {

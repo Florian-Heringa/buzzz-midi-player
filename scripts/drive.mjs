@@ -192,18 +192,45 @@ try {
   await page.check('input[name="theme"][value="modern"]')
   await page.check('input[name="color-mode"][value="system"]')
 
-  // Zoom: doubling it doubles the staff's music width (the clef area stays the same).
+  await page.keyboard.press('Escape')
+  check('settings close with Escape', (await page.locator('.settings-dialog').count()) === 0)
+  await page.click('.settings-button')
+  await page.mouse.click(5, 5) // the backdrop, outside the dialog
+  check('settings close on a click outside', (await page.locator('.settings-dialog').count()) === 0)
+
+  // Zoom (next to Solo part / Mute part): doubling it doubles the staff's music width.
   const musicWidth = () =>
     page.locator('.staff-view__svg').evaluate((svg) => svg.width.baseVal.value - 90 - 40)
   const widthAtDefault = await musicWidth()
-  await setRange('.settings-dialog input[type="range"]', 160)
+  await setRange('.zoom-control input', 160)
   const widthZoomed = await musicWidth()
   check('zoom widens the staff', Math.abs(widthZoomed / widthAtDefault - 2) < 0.01, `${widthAtDefault} → ${widthZoomed}px`)
-  check('settings are remembered', JSON.parse(await page.evaluate(() => localStorage.getItem('settings'))).zoom === 160)
-  await page.locator('.settings-dialog__row').dblclick()
+  check('zoom is remembered', JSON.parse(await page.evaluate(() => localStorage.getItem('settings'))).zoom === 160)
+  await page.locator('.zoom-control__label').dblclick()
   check('double-clicking the zoom label resets it', (await musicWidth()) === widthAtDefault)
-  await page.keyboard.press('Escape')
-  check('settings close with Escape', (await page.locator('.settings-dialog').count()) === 0)
+  await page.click('.zoom-control >> [aria-label="Zoom in"]')
+  check('the + button zooms in', Math.abs((await musicWidth()) / widthAtDefault - 1.25) < 0.01)
+  await page.locator('.zoom-control__label').dblclick()
+
+  // Wheel over the notes zooms, keeping the beat under the mouse where it is.
+  const staffBox = await page.locator('.staff-view__scroller').boundingBox()
+  const mouseX = staffBox.x + staffBox.width * 0.6
+  await page.mouse.move(mouseX, staffBox.y + staffBox.height / 2)
+  const tickUnderMouse = () =>
+    page.locator('.staff-view__scroller').evaluate((el, x) => {
+      const svg = el.querySelector('svg')
+      const px = el.scrollLeft + (x - el.getBoundingClientRect().left)
+      const pxPerTick = (svg.width.baseVal.value - 90 - 40) / 15360 // the sample is 8 bars × 1920 ticks
+      return (px - 90) / pxPerTick
+    }, mouseX)
+  const tickBefore = await tickUnderMouse()
+  await page.mouse.wheel(0, -400)
+  await page.waitForTimeout(200)
+  const widthAfterWheel = await musicWidth()
+  const tickAfter = await tickUnderMouse()
+  check('the mouse wheel zooms the notes', widthAfterWheel > widthAtDefault * 1.3, `${widthAtDefault} → ${Math.round(widthAfterWheel)}px`)
+  check('wheel zoom keeps the beat under the mouse', Math.abs(tickAfter - tickBefore) < 40, `tick ${Math.round(tickBefore)} → ${Math.round(tickAfter)}`)
+  await page.locator('.zoom-control__label').dblclick()
   const savedTheme = await page.evaluate(() => localStorage.getItem('display-theme'))
   check('theme choice is remembered', savedTheme === JSON.stringify({ theme: 'modern', mode: 'system' }))
   await page.reload()
@@ -431,6 +458,21 @@ try {
   const sheetLaterX = await sheetPlayheadX()
   check('the sheet playhead moves with playback', sheetLaterX > sheetStartX + 50, `${Math.round(sheetStartX)} → ${Math.round(sheetLaterX)}`)
   check('a sounding note is highlighted on the sheet', (await page.locator('.sheet-note--sounding').count()) > 0)
+  // Constant speed: the playhead's x moves the same distance per tick throughout.
+  const speedSamples = []
+  for (let i = 0; i < 6; i++) {
+    // Read position and playhead together, so no frame passes between them.
+    speedSamples.push(
+      await page.evaluate(() => [
+        Number(document.querySelector('.transport__position').value),
+        Number(document.querySelector('.sheet-view .staff__playhead').getAttribute('x1'))
+      ])
+    )
+    await page.waitForTimeout(250)
+  }
+  const rates = speedSamples.slice(1).map(([t, x], i) => (x - speedSamples[i][1]) / (t - speedSamples[i][0]))
+  const steady = Math.max(...rates) / Math.min(...rates)
+  check('sheet music moves at a constant speed', steady < 1.02, rates.map((r) => r.toFixed(4)).join(' '))
   await page.click('.transport__play') // pause
   await page.waitForTimeout(200)
   // Clicking bar 3 of the sheet moves the playhead there (bar 3 starts at tick 3840).
@@ -442,6 +484,14 @@ try {
   const seekedTick = Number(await page.locator('.transport__position').inputValue())
   check('clicking the sheet seeks', seekedTick >= 3840 && seekedTick < 4800, `tick ${seekedTick}`)
   await page.screenshot({ path: resolve(SHOT_DIR, 'sheet-music.png') })
+  // Zooming out shrinks the whole sheet (spacing can't shrink without notes colliding).
+  const sheetWidth = () => page.locator('.sheet-view__drawing svg').evaluate((svg) => svg.getBoundingClientRect().width)
+  const sheetWidthAtDefault = await sheetWidth()
+  await setRange('.zoom-control input', 40)
+  await page.waitForTimeout(300) // the sheet redraws once zooming settles
+  const sheetWidthZoomedOut = await sheetWidth()
+  check('zooming out shrinks the sheet', Math.abs(sheetWidthZoomedOut / sheetWidthAtDefault - 0.5) < 0.02, `${Math.round(sheetWidthAtDefault)} → ${Math.round(sheetWidthZoomedOut)}px`)
+  await page.locator('.zoom-control__label').dblclick()
   await page.click('button[aria-label="Stop"]')
   await page.click('.settings-button')
   await page.check('input[name="note-display"][value="piano-roll"]')
