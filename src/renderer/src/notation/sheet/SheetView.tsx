@@ -68,11 +68,21 @@ interface Rendered {
   bottom: number
 }
 
-/** A bar prepared for drawing: notes, voices and beams, plus where its beats are. */
+/**
+ * Beams a bar's notes by beat. The whole bar goes in, rests included: groups are found by
+ * counting durations from the bar start, so leaving rests out would shift every group off the
+ * beat. Rests still break beams.
+ */
+function beamBar(staffNotes: StaveNote[][], timeSig: string): Beam[] {
+  return staffNotes.flatMap((list) =>
+    Beam.generateBeams(list, { groups: Beam.getDefaultBeamGroups(timeSig) })
+  )
+}
+
+/** A bar prepared for drawing: notes and voices, plus where its beats are. */
 interface PreparedMeasure {
   staffNotes: StaveNote[][]
   voices: Voice[]
-  beams: Beam[]
   formatter: Formatter
   /** Beat positions (grid units from the bar start) and their tick contexts. */
   contexts: { units: number; context: TickContext }[]
@@ -116,12 +126,8 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
         .setMode(Voice.Mode.SOFT)
         .addTickables(list)
     )
-    const beams = staffNotes.flatMap((list) =>
-      // The whole bar, rests included: beam groups are found by counting durations from the
-      // bar start, so leaving rests out would shift every group off the beat. Rests still
-      // break beams.
-      Beam.generateBeams(list, { groups: Beam.getDefaultBeamGroups(timeSig) })
-    )
+    // Beamed now so the measuring sees beamed notes (no flags, final stem directions).
+    beamBar(staffNotes, timeSig)
     const formatter = new Formatter()
     voices.forEach((voice) => formatter.joinVoices([voice]))
     formatter.format(voices) // measures notes and creates the beat positions
@@ -131,7 +137,7 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
       context: tickContexts.map[tick]
     }))
     const units = (measure.endTick - measure.startTick) / sheet.unitTicks
-    return { staffNotes, voices, beams, formatter, contexts, units, timeSig }
+    return { staffNotes, voices, formatter, contexts, units, timeSig }
   })
 
   // Room before a bar's first note (for its accidentals) and the scale that fits every bar.
@@ -221,7 +227,9 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
       new StaveConnector(staves[0], staves[1]).setType('singleRight').setContext(context).draw()
     }
     bar.voices.forEach((voice, staff) => voice.draw(context, staves[staff]))
-    bar.beams.forEach((beam) => beam.setContext(context).draw())
+    // Beamed again now that the notes have their staff and place: a beam fixes its slope and
+    // stem lengths the first time it is laid out, which for the first beams was before that.
+    beamBar(bar.staffNotes, bar.timeSig).forEach((beam) => beam.setContext(context).draw())
 
     // Time runs linearly through the bar: from its start beat to the next bar's.
     anchors.push([measure.startTick, noteStart + lead], [measure.endTick, noteStart + lead + bar.units * scale])
