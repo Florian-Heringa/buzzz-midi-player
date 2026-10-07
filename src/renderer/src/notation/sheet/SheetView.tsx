@@ -117,10 +117,10 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
         .addTickables(list)
     )
     const beams = staffNotes.flatMap((list) =>
-      Beam.generateBeams(
-        list.filter((n) => !n.isRest()),
-        { groups: Beam.getDefaultBeamGroups(timeSig) }
-      )
+      // The whole bar, rests included: beam groups are found by counting durations from the
+      // bar start, so leaving rests out would shift every group off the beat. Rests still
+      // break beams.
+      Beam.generateBeams(list, { groups: Beam.getDefaultBeamGroups(timeSig) })
     )
     const formatter = new Formatter()
     voices.forEach((voice) => formatter.joinVoices([voice]))
