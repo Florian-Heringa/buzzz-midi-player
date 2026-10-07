@@ -4,6 +4,8 @@ import { useAppStore } from './store/appStore'
 import { ExportDialog } from './ui/ExportDialog'
 import { MixerPanel } from './ui/MixerPanel'
 import { PracticeHeader } from './ui/PracticeHeader'
+import { SettingsDialog } from './ui/SettingsDialog'
+import { useSettings } from './ui/settings'
 import { SplitPanes } from './ui/SplitPanes'
 import { trackHueStyle } from './ui/theme'
 import { Toasts } from './ui/Toasts'
@@ -15,6 +17,7 @@ export default function App(): React.JSX.Element {
   const selectedTrack = useAppStore((s) =>
     s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId] : null
   )
+  const { noteDisplay } = useSettings()
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
 
@@ -52,8 +55,10 @@ export default function App(): React.JSX.Element {
               {selectedTrack &&
                 (selectedTrack.isDrum ? (
                   <p className="placeholder">Drum tracks are not shown on a staff.</p>
-                ) : (
+                ) : noteDisplay === 'piano-roll' ? (
                   <StaffView song={song} track={selectedTrack} />
+                ) : (
+                  <p className="placeholder">Sheet music display is not available yet.</p>
                 ))}
             </>
           ) : (
@@ -65,6 +70,7 @@ export default function App(): React.JSX.Element {
       </SplitPanes>
 
       <ExportDialog />
+      <SettingsDialog />
       <Toasts />
     </div>
   )

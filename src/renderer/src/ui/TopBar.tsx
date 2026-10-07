@@ -2,12 +2,12 @@ import { useEffect, useState, type KeyboardEvent } from 'react'
 import { measureCount } from '../model/measures'
 import { MAX_TEMPO_FACTOR, MIN_TEMPO_FACTOR, useAppStore } from '../store/appStore'
 import { formatTime, keyName } from './format'
-import { ThemeMenu } from './ThemeMenu'
 
 /** Top pane: file actions, song details, transport, tempo and loop controls. */
 export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   const song = useAppStore((s) => s.song)
   const openExportDialog = useAppStore((s) => s.openExportDialog)
+  const openSettings = useAppStore((s) => s.openSettings)
 
   // The header is a single row that never wraps, so its height stays fixed when items
   // (like the last export) appear; song details are clipped instead on narrow windows.
@@ -23,7 +23,14 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
           <SongSummary />
           <div className="top-bar__end">
             <LastExport />
-            <ThemeMenu />
+            <button
+              className="settings-button"
+              onClick={openSettings}
+              title="Settings (Ctrl+,)"
+              aria-haspopup="dialog"
+            >
+              <span aria-hidden>⚙</span> Settings
+            </button>
           </div>
         </div>
       </header>

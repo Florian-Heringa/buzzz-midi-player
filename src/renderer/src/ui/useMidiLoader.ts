@@ -53,6 +53,7 @@ export function useMidiLoader(): {
         else if (command === 'load-preset') void store.loadPresetFromFile()
         else if (command === 'reset-settings') store.resetSettings()
         else if (command === 'export-mp3') store.openExportDialog()
+        else if (command === 'open-settings') store.openSettings()
       }),
     [openDialog]
   )

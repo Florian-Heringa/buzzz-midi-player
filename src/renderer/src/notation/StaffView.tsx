@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import type { Song, Track } from '../model/song'
 import { trackDisplayName, useAppStore } from '../store/appStore'
+import { useSettings } from '../ui/settings'
 import { layoutStaff, type Accidental, type Clef, type StaffLayout } from './staffLayout'
 
 // U+FE0E requests the text (not emoji) presentation, which Windows otherwise draws in color.
@@ -13,7 +14,8 @@ const ACCIDENTAL_GLYPH: Record<Accidental, string> = {
 const FOLLOW_POSITION = 0.3
 
 export function StaffView({ song, track }: { song: Song; track: Track }): React.JSX.Element {
-  const layout = useMemo(() => layoutStaff(song, track), [song, track])
+  const { zoom, followPlayhead } = useSettings()
+  const layout = useMemo(() => layoutStaff(song, track, { pxPerBeat: zoom }), [song, track, zoom])
   const scroller = useRef<HTMLDivElement>(null)
   const seek = useAppStore((s) => s.seek)
   const name = useAppStore((s) => trackDisplayName(s, track.id))
@@ -21,19 +23,27 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
   // Back to the start when switching track or song.
   useEffect(() => {
     if (scroller.current) scroller.current.scrollLeft = 0
+  }, [song, track])
+
+  // After zooming, bring the playhead back into view.
+  useEffect(() => {
+    const el = scroller.current
+    const tick = useAppStore.getState().positionTick
+    if (el && tick > 0) {
+      el.scrollLeft = layout.originX + tick * layout.pxPerTick - el.clientWidth * FOLLOW_POSITION
+    }
   }, [layout])
 
   // Keep the playhead in view while playing (store subscription: no re-render needed).
-  useEffect(
-    () =>
-      useAppStore.subscribe((state) => {
-        const el = scroller.current
-        if (state.transport !== 'playing' || !el) return
-        const x = layout.originX + state.positionTick * layout.pxPerTick
-        el.scrollLeft = x - el.clientWidth * FOLLOW_POSITION
-      }),
-    [layout]
-  )
+  useEffect(() => {
+    if (!followPlayhead) return
+    return useAppStore.subscribe((state) => {
+      const el = scroller.current
+      if (state.transport !== 'playing' || !el) return
+      const x = layout.originX + state.positionTick * layout.pxPerTick
+      el.scrollLeft = x - el.clientWidth * FOLLOW_POSITION
+    })
+  }, [layout, followPlayhead])
 
   /** Staff x of the pointer, clamped to the start of the music. */
   const pointerX = (event: MouseEvent<SVGSVGElement>): number =>

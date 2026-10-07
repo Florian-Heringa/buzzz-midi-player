@@ -300,7 +300,7 @@
 
 /* Raised bevel: light top-left, dark bottom-right. */
 :root[data-theme='oldschool']
-  :is(.strip, .top-bar__header, .top-bar__playback, .theme-menu__panel, .toast, .export-dialog, .last-export) {
+  :is(.strip, .top-bar__header, .top-bar__playback, .settings-dialog, .toast, .export-dialog, .last-export) {
   border: 2px solid;
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
 }
@@ -459,7 +459,7 @@
 
 /* Tracker labels in uppercase. Names and values keep their case. */
 :root[data-theme='retro']
-  :is(button:not(.strip__name, .last-export *), .control-group__label, .song-summary dt, .knob__text, .strip__meta, legend, .theme-menu__option) {
+  :is(button:not(.strip__name, .last-export *), .control-group__label, .song-summary dt, .knob__text, .strip__meta, legend) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }

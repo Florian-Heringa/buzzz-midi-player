@@ -45,6 +45,7 @@ interface AppState {
   tempoFactor: number
   exportSettings: ExportSettings
   exportDialogOpen: boolean
+  settingsOpen: boolean
   /** Export render progress 0–1, or null when no export is running. */
   exportProgress: number | null
   /** The most recently exported file, shown until dismissed or replaced by the next export. */
@@ -68,6 +69,8 @@ interface AppState {
   renameTrack(trackId: number, label: string): void
   setExportSettings(change: Partial<ExportSettings>): void
   openExportDialog(): void
+  openSettings(): void
+  closeSettings(): void
   closeExportDialog(): void
   startExport(): Promise<void>
   cancelExport(): void
@@ -174,6 +177,7 @@ export const useAppStore = create<AppState>((set, get) => {
     tempoFactor: 1,
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     exportDialogOpen: false,
+    settingsOpen: false,
     exportProgress: null,
     lastExport: null,
     loop: { enabled: false, startBar: 1, endBar: 1 },
@@ -284,6 +288,9 @@ export const useAppStore = create<AppState>((set, get) => {
     openExportDialog: () => {
       if (get().song) set({ exportDialogOpen: true })
     },
+
+    openSettings: () => set({ settingsOpen: true }),
+    closeSettings: () => set({ settingsOpen: false }),
 
     closeExportDialog: () => {
       get().cancelExport()

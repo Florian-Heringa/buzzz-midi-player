@@ -25,7 +25,13 @@ export interface ExportResult {
 }
 
 /** Commands sent from the application menu to the renderer. */
-export type MenuCommand = 'open-midi' | 'save-preset' | 'load-preset' | 'reset-settings' | 'export-mp3'
+export type MenuCommand =
+  | 'open-midi'
+  | 'save-preset'
+  | 'load-preset'
+  | 'reset-settings'
+  | 'export-mp3'
+  | 'open-settings'
 
 /** API exposed to the renderer through the preload script as `window.api`. */
 export interface ElectronApi {

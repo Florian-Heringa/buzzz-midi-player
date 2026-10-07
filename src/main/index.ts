@@ -72,6 +72,12 @@ function buildMenu(): void {
           click: () => sendMenuCommand('reset-settings')
         },
         { type: 'separator' },
+        {
+          label: 'Settings…',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => sendMenuCommand('open-settings')
+        },
+        { type: 'separator' },
         { role: 'quit' }
       ]
     },

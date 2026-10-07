@@ -150,10 +150,10 @@ try {
   await page.locator('.strip__name').nth(1).click() // a selected strip with a tinted background
   for (const theme of ['modern', 'classic', 'oldschool', 'retro']) {
     for (const mode of ['light', 'dark']) {
-      await page.click('.theme-menu__button')
+      await page.click('.settings-button')
       await page.check(`input[name="theme"][value="${theme}"]`)
       await page.check(`input[name="color-mode"][value="${mode}"]`)
-      await page.keyboard.press('Escape')
+      await page.click('.settings-dialog >> text=Done')
       const applied = await page.evaluate(() => [document.documentElement.dataset.theme, document.documentElement.dataset.mode])
       const native = await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)
       check(`${theme} ${mode} applies`, applied[0] === theme && applied[1] === mode && native === mode)
@@ -167,19 +167,42 @@ try {
       await page.screenshot({ path: resolve(SHOT_DIR, `theme-${theme}-${mode}.png`) })
     }
   }
-  await page.click('.theme-menu__button')
-  await page.screenshot({ path: resolve(SHOT_DIR, 'theme-menu.png') })
-  const menuVisible = await page.evaluate(() =>
-    [...document.querySelectorAll('.theme-menu__option')].every((option) => {
+  // Settings dialog: opens from the File menu too; every option is reachable.
+  await app.evaluate(({ Menu }) => {
+    Menu.getApplicationMenu()
+      .items.flatMap((menu) => menu.submenu?.items ?? [])
+      .find((item) => item.label === 'Settings…')
+      .click()
+  })
+  await page.waitForSelector('.settings-dialog')
+  await page.screenshot({ path: resolve(SHOT_DIR, 'settings.png') })
+  const optionsVisible = await page.evaluate(() =>
+    [...document.querySelectorAll('.settings-dialog__option')].every((option) => {
       const box = option.getBoundingClientRect()
       return option.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))
     })
   )
-  check('every theme menu option is visible and clickable', menuVisible)
+  check('every settings option is visible', optionsVisible)
+  check(
+    'piano roll is the note display; sheet music is not available yet',
+    (await page.isChecked('input[name="note-display"][value="piano-roll"]')) &&
+      (await page.isDisabled('input[name="note-display"][value="sheet-music"]'))
+  )
   await page.check('input[name="theme"][value="modern"]')
   await page.check('input[name="color-mode"][value="system"]')
+
+  // Zoom: doubling it doubles the staff's music width (the clef area stays the same).
+  const musicWidth = () =>
+    page.locator('.staff-view__svg').evaluate((svg) => svg.width.baseVal.value - 90 - 40)
+  const widthAtDefault = await musicWidth()
+  await setRange('.settings-dialog input[type="range"]', 160)
+  const widthZoomed = await musicWidth()
+  check('zoom widens the staff', Math.abs(widthZoomed / widthAtDefault - 2) < 0.01, `${widthAtDefault} → ${widthZoomed}px`)
+  check('settings are remembered', JSON.parse(await page.evaluate(() => localStorage.getItem('settings'))).zoom === 160)
+  await page.locator('.settings-dialog__row').dblclick()
+  check('double-clicking the zoom label resets it', (await musicWidth()) === widthAtDefault)
   await page.keyboard.press('Escape')
-  check('theme menu closes with Escape', (await page.locator('.theme-menu__panel').count()) === 0)
+  check('settings close with Escape', (await page.locator('.settings-dialog').count()) === 0)
   const savedTheme = await page.evaluate(() => localStorage.getItem('display-theme'))
   check('theme choice is remembered', savedTheme === JSON.stringify({ theme: 'modern', mode: 'system' }))
   await page.reload()
@@ -409,6 +432,15 @@ try {
     .evaluateAll((fills) => fills.map((f) => f.getBoundingClientRect().height))
   check('level meters move while playing', meterHeights.some((h) => h > 5), meterHeights.map(Math.round).join('/'))
   check('a sounding note is highlighted', (await page.locator('.staff__notehead--sounding').count()) > 0)
+  await page.click('.settings-button')
+  await page.uncheck('.settings-dialog input[type="checkbox"]')
+  await page.click('.settings-dialog >> text=Done')
+  const heldScroll = await scrollLeft()
+  await page.waitForTimeout(1000)
+  check('the staff stays put when following is off', (await scrollLeft()) === heldScroll)
+  await page.click('.settings-button')
+  await page.check('.settings-dialog input[type="checkbox"]')
+  await page.click('.settings-dialog >> text=Done')
   await page.screenshot({ path: resolve(SHOT_DIR, 'staff-playing.png') })
 
   await setRange('.transport__tempo input', 50)

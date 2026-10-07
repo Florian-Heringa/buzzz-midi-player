@@ -769,49 +769,111 @@ select {
   color: var(--text);
 }
 
-/* ---- Display (theme) menu ---- */
+/* ---- Settings dialog ---- */
 
-.theme-menu {
-  position: relative;
-}
-
-/* top/right are set inline from the button's position. */
-.theme-menu__panel {
-  position: fixed;
-  z-index: 10;
-  display: flex;
-  gap: 12px;
-  padding: 12px;
+.settings-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 20px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: calc(var(--radius-lg) + 2px);
   background: var(--panel);
+  color: var(--text);
   box-shadow: var(--shadow-dialog);
 }
 
-.theme-menu__panel fieldset {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 110px;
-  margin: 0;
-  padding: 6px 10px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.settings-dialog::backdrop {
+  background: var(--backdrop);
 }
 
-.theme-menu__panel legend {
+.settings-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+}
+
+.settings-dialog h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-dialog__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.settings-dialog__columns {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-dialog__columns fieldset {
+  flex: 1;
+}
+
+.settings-dialog fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.settings-dialog legend {
   padding: 0 4px;
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-.theme-menu__option {
+.settings-dialog__option {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
 }
 
-.theme-menu__option input {
+.settings-dialog__option input {
   accent-color: var(--accent);
+}
+
+.settings-dialog__option--described {
+  align-items: flex-start;
+}
+
+.settings-dialog__option--described input {
+  margin-top: 3px;
+}
+
+.settings-dialog__option small {
+  display: block;
+  color: var(--muted);
+}
+
+.settings-dialog__option--unavailable {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.settings-dialog__row {
+  display: grid;
+  grid-template-columns: auto 1fr 48px;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-dialog__value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.settings-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
 }
