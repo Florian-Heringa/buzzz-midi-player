@@ -5,6 +5,7 @@ import { ExportDialog } from './ui/ExportDialog'
 import { MixerPanel } from './ui/MixerPanel'
 import { PracticeHeader } from './ui/PracticeHeader'
 import { SplitPanes } from './ui/SplitPanes'
+import { trackHueStyle } from './ui/theme'
 import { TopBar } from './ui/TopBar'
 import { useMidiLoader } from './ui/useMidiLoader'
 
@@ -43,7 +44,7 @@ export default function App(): React.JSX.Element {
       >
         <TopBar onOpen={() => void openDialog()} />
 
-        <main className="staff-pane">
+        <main className="staff-pane" style={selectedTrack ? trackHueStyle(selectedTrack.id) : undefined}>
           {song ? (
             <>
               <PracticeHeader />

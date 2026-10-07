@@ -61,6 +61,8 @@ export interface ElectronApi {
   showExportInFolder(path: string): Promise<boolean>
   /** Subscribes to export progress (0–1). Returns an unsubscribe function. */
   onExportProgress(listener: (fraction: number) => void): () => void
+  /** Makes the window frame and native menus follow the app's light/dark choice. */
+  setNativeTheme(mode: 'system' | 'light' | 'dark'): Promise<void>
   /** Resolves the filesystem path of a File dropped onto the window. */
   getPathForFile(file: File): string
   /** Subscribes to application menu commands. Returns an unsubscribe function. */
@@ -81,5 +83,6 @@ export const IpcChannels = {
   cancelExport: 'export:cancel',
   exportProgress: 'export:progress',
   showExportInFolder: 'export:show-in-folder',
+  setNativeTheme: 'theme:set-native',
   menuCommand: 'menu:command'
 } as const

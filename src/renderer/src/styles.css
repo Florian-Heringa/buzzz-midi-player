@@ -1,33 +1,7 @@
-:root {
-  --bg: #f6f6f4;
-  --panel: #ffffff;
-  --text: #1d1d1f;
-  --muted: #6b6b70;
-  --accent: #3a6ff7;
-  --border: #dcdcdf;
-  --error: #c62828;
-  --mute: #e0a030;
-  --staff-line: #8a8a90;
-  --note: #2b2b30;
-  --note-duration: color-mix(in srgb, var(--accent) 22%, transparent);
-  --note-sounding: var(--accent);
-  --playhead: #e5484d;
-  color-scheme: light dark;
-  font-family: system-ui, 'Segoe UI', sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1b1b1d;
-    --panel: #252528;
-    --text: #ececef;
-    --muted: #9a9aa2;
-    --border: #3a3a3f;
-    --error: #ef5350;
-    --staff-line: #6c6c74;
-    --note: #e6e6ea;
-  }
-}
+/*
+ * Layout and component styles. Colors, radii and shadows come from the theme tokens in
+ * themes.css; no colors are hardcoded here.
+ */
 
 * {
   box-sizing: border-box;
@@ -40,6 +14,7 @@ body,
   height: 100%;
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font);
 }
 
 /* ---- Controls ---- */
@@ -47,15 +22,23 @@ body,
 button {
   font: inherit;
   padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
 }
 
 button:hover {
-  border-color: var(--accent);
+  border-color: var(--control-hover-border);
+  background: var(--control-hover-bg);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 button:disabled {
@@ -64,10 +47,12 @@ button:disabled {
 }
 
 .button--active,
-.button--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+.button--primary,
+.button--active:hover,
+.button--primary:hover {
+  border-color: transparent;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 input[type='range'] {
@@ -79,8 +64,8 @@ select {
   font: inherit;
   padding: 2px 4px;
   border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
   color: var(--text);
 }
 
@@ -128,7 +113,7 @@ select {
 }
 
 .split-panes__divider {
-  background: var(--border);
+  background: var(--divider);
   cursor: row-resize;
   touch-action: none;
 }
@@ -151,7 +136,7 @@ select {
 .top-bar__header {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--header-bg);
 }
 
 .top-bar__playback {
@@ -181,7 +166,7 @@ select {
 
 .top-bar__notice {
   padding: 2px 10px;
-  border-radius: 10px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   font-size: 0.85rem;
 }
@@ -258,7 +243,10 @@ select {
 
 /* ---- Middle pane: staff ---- */
 
+/* --track-hue (set inline) is the practice track's; themes derive --track-color from it. */
 .staff-pane {
+  --note-duration: color-mix(in srgb, var(--track-color) 24%, transparent);
+  --note-sounding: var(--track-color);
   padding: 12px 16px;
 }
 
@@ -276,8 +264,19 @@ select {
 }
 
 .practice-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 8px 0 0;
   font-size: 1.2rem;
+}
+
+/* The practice track's color (Modern theme). */
+.practice-header__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--track-color);
 }
 
 /* ---- Bottom pane: mixer ---- */
@@ -312,8 +311,8 @@ select {
   padding: 8px;
   border: 1px solid var(--border);
   border-top: 3px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
+  border-radius: var(--radius-lg);
+  background: var(--strip-bg);
 }
 
 .strip > * {
@@ -321,8 +320,8 @@ select {
 }
 
 .strip--selected {
-  border-top-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  border-top-color: var(--track-color);
+  background: color-mix(in srgb, var(--track-color) 8%, var(--strip-bg));
 }
 
 .strip__name {
@@ -335,7 +334,7 @@ select {
 }
 
 .strip--selected .strip__name {
-  border-color: var(--accent);
+  border-color: var(--track-color);
 }
 
 .strip--silenced .strip__name,
@@ -383,7 +382,7 @@ select {
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--panel);
 }
 
@@ -392,7 +391,7 @@ select {
   right: 0;
   bottom: 0;
   left: 0;
-  background: linear-gradient(to top, #2fb26b, #9bd34a 70%, #f0c23b);
+  background: linear-gradient(to top, var(--meter-low), var(--meter-mid) 70%, var(--meter-high));
   transition: height 80ms linear;
 }
 
@@ -429,7 +428,7 @@ select {
 }
 
 .knob__value {
-  stroke: var(--accent);
+  stroke: var(--track-color, var(--accent));
 }
 
 .knob__cap {
@@ -463,24 +462,27 @@ select {
   font-weight: 600;
 }
 
-.strip__toggle--mute {
+.strip__toggle--mute,
+.strip__toggle--mute:hover {
   background: var(--mute);
   border-color: var(--mute);
-  color: #fff;
+  color: var(--on-mute);
 }
 
-.strip__toggle--solo {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+.strip__toggle--solo,
+.strip__toggle--solo:hover {
+  background: var(--accent-fill);
+  border-color: transparent;
+  color: var(--on-accent);
 }
 
 /* ---- Staff ---- */
 
 .staff-view {
   position: relative;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
 }
 
@@ -570,13 +572,14 @@ select {
   width: min(440px, calc(100vw - 32px));
   padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: calc(var(--radius-lg) + 2px);
   background: var(--panel);
   color: var(--text);
+  box-shadow: var(--shadow-dialog);
 }
 
 .export-dialog::backdrop {
-  background: rgb(0 0 0 / 35%);
+  background: var(--backdrop);
 }
 
 .export-dialog h2 {
@@ -588,7 +591,7 @@ select {
   margin: 0 0 12px;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .export-dialog__mode {
@@ -638,8 +641,9 @@ select {
   display: inline-flex;
   align-items: stretch;
   max-width: 360px;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--panel);
 }
 
@@ -647,7 +651,8 @@ select {
   border-color: var(--accent);
 }
 
-.last-export button {
+.last-export button,
+.last-export button:hover {
   border: none;
   border-radius: 0;
   background: none;
@@ -690,4 +695,51 @@ select {
 
 .last-export__dismiss:hover {
   color: var(--text);
+}
+
+/* ---- Display (theme) menu ---- */
+
+.theme-menu {
+  position: relative;
+}
+
+/* top/right are set inline from the button's position. */
+.theme-menu__panel {
+  position: fixed;
+  z-index: 10;
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-dialog);
+}
+
+.theme-menu__panel fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.theme-menu__panel legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.theme-menu__option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.theme-menu__option input {
+  accent-color: var(--accent);
 }

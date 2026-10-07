@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron'
 import { createHash } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
@@ -144,6 +144,10 @@ function registerIpc(): void {
   })
 
   registerExportHandlers(() => mainWindow, soundFontPath)
+
+  ipcMain.handle(IpcChannels.setNativeTheme, (_event, mode: string) => {
+    if (mode === 'system' || mode === 'light' || mode === 'dark') nativeTheme.themeSource = mode
+  })
 
   ipcMain.handle(IpcChannels.loadSoundFont, async () => {
     const path = soundFontPath()

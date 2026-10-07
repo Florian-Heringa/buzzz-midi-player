@@ -12,7 +12,10 @@ export function PracticeHeader(): React.JSX.Element | null {
 
   return (
     <div className="practice-header">
-      <h2 className="practice-header__title">{name}</h2>
+      <h2 className="practice-header__title">
+        <span className="practice-header__swatch" aria-hidden />
+        {name}
+      </h2>
       <button
         aria-pressed={mix.solo}
         className={mix.solo ? 'button--active' : ''}

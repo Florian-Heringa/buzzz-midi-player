@@ -88,6 +88,99 @@ try {
     return (await tick()) - start
   }
 
+
+  // Themes: each theme × appearance applies, follows through to the window frame, and keeps
+  // text readable (WCAG AA 4.5:1). Classic keeps its original colors, so it is only reported.
+  const contrastReport = () =>
+    page.evaluate(() => {
+      const parse = (value) => {
+        const v = value.trim()
+        if (v.startsWith('#')) {
+          const hex = v.length === 4 ? [...v.slice(1)].map((c) => c + c).join('') : v.slice(1)
+          return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+        }
+        const nums = v.match(/[\d.]+/g)?.map(Number) ?? []
+        if (v.startsWith('color(')) return nums.slice(0, 3)
+        return nums.slice(0, 3).map((n) => n / 255)
+      }
+      const luminance = (rgb) =>
+        rgb
+          .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+          .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0)
+      const ratio = (a, b) => {
+        const [l1, l2] = [luminance(parse(a)), luminance(parse(b))].sort((x, y) => y - x)
+        return (l1 + 0.05) / (l2 + 0.05)
+      }
+      const root = getComputedStyle(document.documentElement)
+      const token = (name) => root.getPropertyValue(`--${name}`)
+      const pairs = [
+        ['text', 'bg'],
+        ['text', 'panel'],
+        ['muted', 'bg'],
+        ['muted', 'panel'],
+        ['on-accent', 'accent'],
+        ['on-accent', 'accent-2'],
+        ['on-mute', 'mute'],
+        ['error', 'panel'],
+        ['accent', 'panel']
+      ].filter(([a, b]) => token(a).trim() && token(b).trim())
+      const results = pairs.map(([a, b]) => [`${a} on ${b}`, ratio(token(a), token(b))])
+      // Rendered text in the mixer, where backgrounds are tinted per track.
+      for (const el of document.querySelectorAll('.strip__name, .strip__meta, .practice-header__title')) {
+        let bgEl = el
+        let bg = getComputedStyle(bgEl).backgroundColor
+        while (bg === 'rgba(0, 0, 0, 0)' && bgEl.parentElement) {
+          bgEl = bgEl.parentElement
+          bg = getComputedStyle(bgEl).backgroundColor
+        }
+        results.push([`${el.className} "${el.textContent}"`, ratio(getComputedStyle(el).color, bg)])
+      }
+      return results.map(([name, value]) => [name, Math.round(value * 100) / 100])
+    })
+
+  await page.locator('.strip__name').nth(1).click() // a selected strip with a tinted background
+  for (const theme of ['modern', 'classic']) {
+    for (const mode of ['light', 'dark']) {
+      await page.click('.theme-menu__button')
+      await page.check(`input[name="theme"][value="${theme}"]`)
+      await page.check(`input[name="color-mode"][value="${mode}"]`)
+      await page.keyboard.press('Escape')
+      const applied = await page.evaluate(() => [document.documentElement.dataset.theme, document.documentElement.dataset.mode])
+      const native = await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)
+      check(`${theme} ${mode} applies`, applied[0] === theme && applied[1] === mode && native === mode)
+      const report = await contrastReport()
+      const low = report.filter(([, value]) => value < 4.5)
+      if (theme === 'modern') {
+        check(`${theme} ${mode} text contrast ≥ 4.5`, low.length === 0, low.map(([n, v]) => `${n}: ${v}`).join('; '))
+      } else {
+        console.log(`info  ${theme} ${mode} contrast below 4.5: ${low.map(([n, v]) => `${n}: ${v}`).join('; ') || 'none'}`)
+      }
+      await page.screenshot({ path: resolve(SHOT_DIR, `theme-${theme}-${mode}.png`) })
+    }
+  }
+  await page.click('.theme-menu__button')
+  await page.screenshot({ path: resolve(SHOT_DIR, 'theme-menu.png') })
+  const menuVisible = await page.evaluate(() =>
+    [...document.querySelectorAll('.theme-menu__option')].every((option) => {
+      const box = option.getBoundingClientRect()
+      return option.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2))
+    })
+  )
+  check('every theme menu option is visible and clickable', menuVisible)
+  await page.check('input[name="theme"][value="modern"]')
+  await page.check('input[name="color-mode"][value="system"]')
+  await page.keyboard.press('Escape')
+  check('theme menu closes with Escape', (await page.locator('.theme-menu__panel').count()) === 0)
+  const savedTheme = await page.evaluate(() => localStorage.getItem('display-theme'))
+  check('theme choice is remembered', savedTheme === JSON.stringify({ theme: 'modern', mode: 'system' }))
+  await page.reload()
+  await page.waitForSelector('text=Open MIDI')
+  check('saved theme applies on startup', (await page.evaluate(() => document.documentElement.dataset.theme)) === 'modern')
+  await page.click('text=Open MIDI')
+  await page.waitForSelector('.strip')
+  await page.waitForFunction(() => !document.querySelector('.transport__status'), null, { timeout: 30_000 })
+  await page.locator('.strip__name').first().click()
+
   // Staff: one notehead per note for each track, screenshot per track.
   const names = await page.locator('.strip__name').allInnerTexts()
   for (let i = 0; i < names.length; i++) {

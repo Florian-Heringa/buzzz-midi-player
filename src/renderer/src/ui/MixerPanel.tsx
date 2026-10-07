@@ -7,6 +7,7 @@ import { MAX_TRACK_LABEL_LENGTH } from '../presets/preset'
 import { useAppStore } from '../store/appStore'
 import { panLabel } from './format'
 import { Knob } from './Knob'
+import { trackHueStyle } from './theme'
 
 const volumeText = (volume: number): string => `Vol ${Math.round((volume / 127) * 100)}%`
 const panText = (pan: number): string => `Pan ${panLabel(pan)}`
@@ -89,6 +90,7 @@ function ChannelStrip({
       className={['strip', selected && 'strip--selected', silenced && 'strip--silenced']
         .filter(Boolean)
         .join(' ')}
+      style={trackHueStyle(track.id)}
       aria-label={name}
     >
       <TrackName track={track} name={name} selected={selected} onSelect={() => selectTrack(track.id)} />

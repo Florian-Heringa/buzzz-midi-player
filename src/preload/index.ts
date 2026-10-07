@@ -16,6 +16,7 @@ const api: ElectronApi = {
   cancelExport: () => ipcRenderer.invoke(IpcChannels.cancelExport),
   showExportInFolder: (path) => ipcRenderer.invoke(IpcChannels.showExportInFolder, path),
   onExportProgress: (listener) => subscribe(IpcChannels.exportProgress, listener),
+  setNativeTheme: (mode) => ipcRenderer.invoke(IpcChannels.setNativeTheme, mode),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   onMenuCommand: (listener) => subscribe<MenuCommand>(IpcChannels.menuCommand, listener)
 }

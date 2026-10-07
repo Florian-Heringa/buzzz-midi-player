@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from 'react'
 import { measureCount } from '../model/measures'
 import { MAX_TEMPO_FACTOR, MIN_TEMPO_FACTOR, useAppStore } from '../store/appStore'
 import { formatTime, keyName } from './format'
+import { ThemeMenu } from './ThemeMenu'
 
 /** Top pane: file actions, song details, transport, tempo and loop controls. */
 export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
@@ -27,6 +28,7 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
               </span>
             )}
             <LastExport />
+            <ThemeMenu />
           </div>
         </div>
         {error && (
