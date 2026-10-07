@@ -184,11 +184,6 @@ try {
     })
   )
   check('every settings option is visible', optionsVisible)
-  check(
-    'piano roll is the default note display; sheet music is available',
-    (await page.isChecked('input[name="note-display"][value="piano-roll"]')) &&
-      !(await page.isDisabled('input[name="note-display"][value="sheet-music"]'))
-  )
   await page.check('input[name="theme"][value="modern"]')
   await page.check('input[name="color-mode"][value="system"]')
 
@@ -436,10 +431,11 @@ try {
   await page.screenshot({ path: resolve(SHOT_DIR, 'fitted-layout.png') })
 
   // Sheet music: notation for the practice part, with the same playhead behaviour.
-  await page.click('.settings-button')
-  await page.check('input[name="note-display"][value="sheet-music"]')
-  await page.click('.settings-dialog >> text=Done')
+  const viewButton = (label) => page.locator('.view-switch button', { hasText: label })
+  check('piano roll is the default view', (await viewButton('Piano roll').getAttribute('aria-pressed')) === 'true')
+  await viewButton('Sheet music').click()
   await page.waitForSelector('.sheet-view__drawing svg')
+  check('the view switch selects sheet music', (await viewButton('Sheet music').getAttribute('aria-pressed')) === 'true')
   const sheetNotes = await page.locator('.sheet-view .sheet-note').count()
   const selectedNotes = Number(
     (await page.locator('.strip--selected .strip__meta').getAttribute('title')).match(/(\d+) notes/)[1]
@@ -493,9 +489,7 @@ try {
   check('zooming out shrinks the sheet', Math.abs(sheetWidthZoomedOut / sheetWidthAtDefault - 0.5) < 0.02, `${Math.round(sheetWidthAtDefault)} → ${Math.round(sheetWidthZoomedOut)}px`)
   await page.locator('.zoom-control__label').dblclick()
   await page.click('button[aria-label="Stop"]')
-  await page.click('.settings-button')
-  await page.check('input[name="note-display"][value="piano-roll"]')
-  await page.click('.settings-dialog >> text=Done')
+  await viewButton('Piano roll').click()
   await page.waitForSelector('.staff-view__svg')
 
   await page.click('.transport__play')
@@ -571,6 +565,28 @@ try {
   await page.waitForTimeout(500)
   check('instrument change keeps playing', (await level()) > 0.001)
   await page.screenshot({ path: resolve(SHOT_DIR, 'mixer.png') })
+
+  // Reset buttons at the left of the mixer act on every track.
+  const resetButton = (label) => page.locator('.mixer-resets button', { hasText: label })
+  const programs = () => page.locator('.strip__instrument').evaluateAll((selects) => selects.map((s) => s.value))
+  check('instrument reset is available after changing one', !(await resetButton('All to piano').isDisabled()))
+  await resetButton('All to piano').click()
+  check('All to piano sets every instrument to piano', (await programs()).every((value) => value === '0'))
+  check('a reset with nothing left to do is disabled', await resetButton('All to piano').isDisabled())
+  const firstPan = page.locator('[role="slider"][aria-label$=" pan"]').first()
+  await firstPan.focus()
+  await page.keyboard.press('ArrowLeft')
+  await page.locator('.mixer__toggle[title="Mute"], .strip__toggle[title="Mute"]').nth(2).click()
+  await resetButton('Reset all').click()
+  const afterResetAll = await page.evaluate(() => ({
+    pans: [...document.querySelectorAll('[role="slider"][aria-label$=" pan"]')].map((k) => k.getAttribute('aria-valuenow')),
+    mutes: [...document.querySelectorAll('.strip__toggle[title="Mute"]')].map((b) => b.getAttribute('aria-pressed'))
+  }))
+  check(
+    'Reset all resets pan and mute on every track',
+    afterResetAll.pans.every((p) => p === '0') && afterResetAll.mutes.every((m) => m === 'false')
+  )
+  check('every reset is disabled once everything is default', await page.locator('.mixer-resets button:not([disabled])').count() === 0)
 
   await page.click('.transport__play')
   await page.waitForTimeout(200) // pause settles the final position asynchronously

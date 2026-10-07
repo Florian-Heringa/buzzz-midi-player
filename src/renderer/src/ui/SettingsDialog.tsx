@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { useAppStore } from '../store/appStore'
 import {
   CHANNEL_TRACK_OPTIONS,
-  NOTE_DISPLAYS,
   updateSettings,
   useSettings
 } from './settings'
@@ -83,29 +82,6 @@ export function SettingsDialog(): React.JSX.Element | null {
 
       <section className="settings-dialog__section">
         <h3>Notation</h3>
-        <fieldset>
-          <legend>Note display</legend>
-          {NOTE_DISPLAYS.map((option) => (
-            <label
-              key={option.value}
-              className={`settings-dialog__option settings-dialog__option--described${option.available ? '' : ' settings-dialog__option--unavailable'}`}
-            >
-              <input
-                type="radio"
-                name="note-display"
-                value={option.value}
-                disabled={!option.available}
-                checked={settings.noteDisplay === option.value}
-                onChange={() => updateSettings({ noteDisplay: option.value })}
-              />
-              <span>
-                {option.label}
-                <small>{option.hint}</small>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-
         <fieldset>
           <legend>MIDI tracks with several channels</legend>
           {CHANNEL_TRACK_OPTIONS.map((option) => (

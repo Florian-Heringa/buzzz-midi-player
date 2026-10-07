@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { DEFAULT_VOLUME, effectiveVolume, type TrackMix } from '../audio/mixer'
+import { canReset, DEFAULT_VOLUME, effectiveVolume, type MixReset, type TrackMix } from '../audio/mixer'
 import { GM_FAMILIES, GM_PROGRAM_NAMES, midiNoteName } from '../model/gm'
 import { isSounding } from '../model/sounding'
 import { noteRange, type Track } from '../model/song'
@@ -48,6 +48,7 @@ export function MixerPanel(): React.JSX.Element {
 
   return (
     <div className="mixer-panel" role="group" aria-label="Mixer">
+      <MixerResets />
       {song.tracks.map((track) => (
         <ChannelStrip
           key={track.id}
@@ -60,6 +61,39 @@ export function MixerPanel(): React.JSX.Element {
         />
       ))}
     </div>
+  )
+}
+
+const RESETS: { reset: MixReset; label: string; title: string }[] = [
+  { reset: 'volume', label: 'Reset volume', title: 'Set every track to the default volume' },
+  { reset: 'pan', label: 'Center pan', title: 'Center the pan of every track' },
+  { reset: 'mute', label: 'Unmute all', title: 'Unmute every track' },
+  { reset: 'solo', label: 'Unsolo all', title: 'Turn off solo on every track' },
+  { reset: 'instrument', label: 'All to piano', title: 'Set every track to Acoustic Grand Piano (drum tracks keep their kit)' },
+  { reset: 'all', label: 'Reset all', title: 'Reset volume, pan, mute, solo and instrument of every track' }
+]
+
+/** Reset buttons for all tracks, pinned at the left of the mixer. */
+function MixerResets(): React.JSX.Element | null {
+  const song = useAppStore((s) => s.song)
+  const mixes = useAppStore((s) => s.mixes)
+  const resetAllTracks = useAppStore((s) => s.resetAllTracks)
+  if (!song) return null
+  return (
+    <section className="mixer-resets" aria-label="All tracks">
+      <span className="mixer-resets__title">All tracks</span>
+      {RESETS.map(({ reset, label, title }) => (
+        <button
+          key={reset}
+          className={reset === 'all' ? 'mixer-resets__all' : undefined}
+          onClick={() => resetAllTracks(reset)}
+          disabled={!canReset(mixes, song.tracks, reset)}
+          title={title}
+        >
+          {label}
+        </button>
+      ))}
+    </section>
   )
 }
 

@@ -338,7 +338,26 @@ select {
   font-size: 1.2rem;
 }
 
-/* Zoom follows the Solo part / Mute part buttons, set apart by a divider. */
+/* View and zoom follow the Solo part / Mute part buttons, each set apart by a divider. */
+.view-switch {
+  display: flex;
+  margin-left: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+/* Joined buttons: one control with two halves. */
+.view-switch button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.view-switch button:last-child {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 .zoom-control {
   display: flex;
   align-items: center;
@@ -390,6 +409,40 @@ select {
   padding: 8px 12px;
   overflow-x: auto;
   background: var(--panel);
+}
+
+/* Reset buttons for all tracks: stay at the left while the strips scroll sideways. */
+.mixer-resets {
+  position: sticky;
+  left: -12px; /* the panel's padding */
+  z-index: 1;
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 6px;
+  width: 128px;
+  margin: -8px 0 -8px -12px;
+  padding: 8px 10px 8px 12px;
+  border-right: 1px solid var(--border);
+  background: inherit;
+}
+
+.mixer-resets__title {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mixer-resets button {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.mixer-resets .mixer-resets__all {
+  margin-top: auto;
 }
 
 .mixer-panel__empty {

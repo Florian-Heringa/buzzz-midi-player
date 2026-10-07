@@ -31,7 +31,7 @@ export const CHANNEL_TRACK_OPTIONS: { value: ChannelTracks; label: string; hint:
 export const NOTE_DISPLAYS: { value: NoteDisplay; label: string; hint: string; available: boolean }[] = [
   {
     value: 'piano-roll',
-    label: 'Piano roll on staff',
+    label: 'Piano roll',
     hint: 'Notes placed by pitch on the staff, with bars showing how long each note lasts.',
     available: true
   },

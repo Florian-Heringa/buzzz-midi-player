@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { LoadedMidiFile } from '@shared/api'
 import { AudioEngine } from '../audio/engine'
 import { buildExportMidi } from '../audio/exportMix'
-import { channelStates, defaultMix, type TrackMix } from '../audio/mixer'
+import { channelStates, defaultMix, resetMixes, type MixReset, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
 import { keyChoiceFromFile, withKeyChoice, type KeyChoice } from '../model/keys'
@@ -71,6 +71,8 @@ interface AppState {
   seek(tick: number): void
   setTempoFactor(factor: number): void
   updateMix(trackId: number, change: Partial<TrackMix>): void
+  /** Resets a mixer setting (or all of them) for every track. */
+  resetAllTracks(reset: MixReset): void
   /** Renames a track; an empty name (or the file's own name) restores the file's name. */
   renameTrack(trackId: number, label: string): void
   /** Chooses how the key is read; picking the file's own reading clears the override. */
@@ -302,6 +304,13 @@ export const useAppStore = create<AppState>((set, get) => {
       const next = trimmed === track.name ? '' : trimmed
       if (next === trackLabels[trackId]) return
       set({ trackLabels: trackLabels.map((l, id) => (id === trackId ? next : l)) })
+    },
+
+    resetAllTracks: (reset) => {
+      const { song, mixes } = get()
+      if (!song) return
+      set({ mixes: resetMixes(mixes, song.tracks, reset) })
+      void engine?.setChannels(currentChannelStates())
     },
 
     updateMix: (trackId, change) => {

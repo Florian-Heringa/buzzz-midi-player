@@ -60,3 +60,40 @@ export function channelStates(
 function clampPan(pan: number): number {
   return Math.max(-64, Math.min(63, Math.round(pan)))
 }
+
+/** Acoustic Grand Piano: the instrument "All to piano" sets. */
+export const PIANO_PROGRAM = 0
+
+/** Mixer settings that can be reset for all tracks at once. */
+export type MixReset = 'volume' | 'pan' | 'mute' | 'solo' | 'instrument' | 'all'
+
+/** One track's mix with a setting reset. Drum tracks keep their kit when instruments reset. */
+function resetMix(mix: TrackMix, track: Track, reset: MixReset): TrackMix {
+  const all = reset === 'all'
+  return {
+    volume: all || reset === 'volume' ? DEFAULT_VOLUME : mix.volume,
+    pan: all || reset === 'pan' ? 0 : mix.pan,
+    muted: all || reset === 'mute' ? false : mix.muted,
+    solo: all || reset === 'solo' ? false : mix.solo,
+    program: (all || reset === 'instrument') && !track.isDrum ? PIANO_PROGRAM : mix.program
+  }
+}
+
+/** Every track's mix with a setting reset. */
+export function resetMixes(mixes: readonly TrackMix[], tracks: readonly Track[], reset: MixReset): TrackMix[] {
+  return mixes.map((mix, id) => (tracks[id] ? resetMix(mix, tracks[id], reset) : mix))
+}
+
+/** Whether resetting would change anything (so the button can be disabled when not). */
+export function canReset(mixes: readonly TrackMix[], tracks: readonly Track[], reset: MixReset): boolean {
+  return resetMixes(mixes, tracks, reset).some((mix, id) => {
+    const before = mixes[id]
+    return (
+      mix.volume !== before.volume ||
+      mix.pan !== before.pan ||
+      mix.muted !== before.muted ||
+      mix.solo !== before.solo ||
+      mix.program !== before.program
+    )
+  })
+}

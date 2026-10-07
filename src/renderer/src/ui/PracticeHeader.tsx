@@ -1,5 +1,5 @@
 import { trackDisplayName, useAppStore } from '../store/appStore'
-import { DEFAULT_SETTINGS, MAX_ZOOM, MIN_ZOOM, updateSettings, useSettings } from './settings'
+import { DEFAULT_SETTINGS, MAX_ZOOM, MIN_ZOOM, NOTE_DISPLAYS, updateSettings, useSettings } from './settings'
 
 /** Title of the practice track plus one-click solo / mute for it. */
 export function PracticeHeader(): React.JSX.Element | null {
@@ -33,7 +33,28 @@ export function PracticeHeader(): React.JSX.Element | null {
       >
         Mute part
       </button>
+      <ViewSwitch />
       <ZoomControl />
+    </div>
+  )
+}
+
+/** Piano roll or sheet music, as a pair of toggle buttons. */
+function ViewSwitch(): React.JSX.Element {
+  const { noteDisplay } = useSettings()
+  return (
+    <div className="view-switch" role="group" aria-label="Note display">
+      {NOTE_DISPLAYS.filter((option) => option.available).map((option) => (
+        <button
+          key={option.value}
+          className={noteDisplay === option.value ? 'button--active' : undefined}
+          aria-pressed={noteDisplay === option.value}
+          onClick={() => updateSettings({ noteDisplay: option.value })}
+          title={option.hint}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   )
 }
