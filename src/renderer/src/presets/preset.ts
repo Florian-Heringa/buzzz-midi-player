@@ -1,4 +1,5 @@
 import { DEFAULT_VOLUME, type TrackMix } from '../audio/mixer'
+import type { KeyChoice } from '../model/keys'
 import type { Song } from '../model/song'
 
 export type ExportMode = 'mix' | 'practice-solo' | 'practice-muted'
@@ -35,6 +36,8 @@ export interface Preset {
   selectedTrack: { index: number; name: string } | null
   tracks: PresetTrack[]
   export: ExportSettings
+  /** How the key is read, if the user changed it from the file's key. */
+  key?: KeyChoice
 }
 
 export interface PlayerSettings {
@@ -44,6 +47,8 @@ export interface PlayerSettings {
   exportSettings: ExportSettings
   /** Custom track names, indexed by track id; '' keeps the name from the file. */
   trackLabels: string[]
+  /** How the key is read; null follows the key signature in the file. */
+  keyChoice: KeyChoice | null
 }
 
 export function createPreset(
@@ -64,7 +69,8 @@ export function createPreset(
       ...settings.mixes[track.id],
       ...(settings.trackLabels[track.id] ? { label: settings.trackLabels[track.id] } : {})
     })),
-    export: { ...settings.exportSettings }
+    export: { ...settings.exportSettings },
+    ...(settings.keyChoice ? { key: { ...settings.keyChoice } } : {})
   }
 }
 
@@ -123,7 +129,8 @@ export function applyPreset(song: Song, preset: Preset, defaults: TrackMix[]): P
     tempoFactor: preset.tempoFactor,
     selectedTrackId: selectedTrackId ?? song.tracks[0]?.id ?? null,
     exportSettings: preset.export,
-    trackLabels: song.tracks.map((track) => matched[track.id]?.label ?? '')
+    trackLabels: song.tracks.map((track) => matched[track.id]?.label ?? ''),
+    keyChoice: preset.key ?? null
   }
 }
 
@@ -154,6 +161,7 @@ export function parsePreset(json: unknown): Preset {
 
   const selected = isObject(json.selectedTrack) ? json.selectedTrack : null
   const exportJson = isObject(json.export) ? json.export : {}
+  const keyJson = isObject(json.key) ? json.key : null
   const bitrate = Number(exportJson.bitrate)
   const mode = exportJson.mode
 
@@ -172,7 +180,12 @@ export function parsePreset(json: unknown): Preset {
         ? bitrate
         : DEFAULT_EXPORT_SETTINGS.bitrate,
       mode: mode === 'mix' || mode === 'practice-solo' || mode === 'practice-muted' ? mode : 'mix'
-    }
+    },
+    ...(keyJson &&
+    (keyJson.accidentals === 'sharps' || keyJson.accidentals === 'flats') &&
+    (keyJson.mode === 'major' || keyJson.mode === 'minor')
+      ? { key: { accidentals: keyJson.accidentals, mode: keyJson.mode } }
+      : {})
   }
 }
 

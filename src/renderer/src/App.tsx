@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from 'react'
 import { StaffView } from './notation/StaffView'
-import { useAppStore } from './store/appStore'
+import { interpretedSong, useAppStore } from './store/appStore'
 import { ExportDialog } from './ui/ExportDialog'
 import { MixerPanel } from './ui/MixerPanel'
 import { PracticeHeader } from './ui/PracticeHeader'
@@ -18,6 +18,8 @@ export default function App(): React.JSX.Element {
     s.song && s.selectedTrackId !== null ? s.song.tracks[s.selectedTrackId] : null
   )
   const { noteDisplay } = useSettings()
+  // The song as the user reads its key (sharps or flats, major or minor).
+  const keyedSong = useAppStore(interpretedSong)
   const { openDialog, loadDroppedFile } = useMidiLoader()
   const [dragging, setDragging] = useState(false)
 
@@ -56,7 +58,7 @@ export default function App(): React.JSX.Element {
                 (selectedTrack.isDrum ? (
                   <p className="placeholder">Drum tracks are not shown on a staff.</p>
                 ) : noteDisplay === 'piano-roll' ? (
-                  <StaffView song={song} track={selectedTrack} />
+                  <StaffView song={keyedSong ?? song} track={selectedTrack} />
                 ) : (
                   <p className="placeholder">Sheet music display is not available yet.</p>
                 ))}

@@ -300,7 +300,7 @@
 
 /* Raised bevel: light top-left, dark bottom-right. */
 :root[data-theme='oldschool']
-  :is(.strip, .top-bar__header, .top-bar__playback, .settings-dialog, .toast, .export-dialog, .last-export) {
+  :is(.strip, .top-bar__header, .top-bar__playback, .settings-dialog, .toast, .export-dialog, .last-export, .key-picker__panel) {
   border: 2px solid;
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
 }

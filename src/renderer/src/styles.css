@@ -769,6 +769,76 @@ select {
   color: var(--text);
 }
 
+/* ---- Key picker (song details) ---- */
+
+/* Looks like the other values, with a hint that it can be clicked. */
+.key-picker__button {
+  padding: 0 4px;
+  border: none;
+  border-bottom: 1px dashed currentColor;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.key-picker__button:hover {
+  border-bottom-style: solid;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.key-picker__panel {
+  position: fixed;
+  z-index: 10;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-dialog);
+  font-family: var(--font);
+}
+
+.key-picker__panel fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.key-picker__panel legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.key-picker__option {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.key-picker__option input {
+  accent-color: var(--accent);
+}
+
+.key-picker__result {
+  padding-left: 12px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.key-picker__result small {
+  color: var(--muted);
+  font-weight: normal;
+}
+
 /* ---- Settings dialog ---- */
 
 .settings-dialog {

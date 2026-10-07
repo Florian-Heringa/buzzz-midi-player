@@ -489,6 +489,28 @@ try {
   const silence = await level()
   check('pause silences output', silence < 0.01, `RMS ${silence.toFixed(4)}`)
 
+  // Key: click the key in the song details to read it on the sharp/flat side, major or minor.
+  const keyButton = page.locator('.key-picker__button')
+  check('the key from the file is shown', (await keyButton.innerText()).startsWith('G major'))
+  await keyButton.click()
+  const keyOptions = await page.locator('.key-picker__option').allInnerTexts()
+  check(
+    'the key menu shows what each reading means',
+    JSON.stringify(keyOptions.map((t) => t.replace(/\s+/g, ' ').trim())) ===
+      JSON.stringify([
+        '♯ Sharps · major G major (file)',
+        '♯ Sharps · minor E minor',
+        '♭ Flats · major G major',
+        '♭ Flats · minor E minor'
+      ]),
+    keyOptions.join(' | ')
+  )
+  await page.screenshot({ path: resolve(SHOT_DIR, 'key-picker.png') })
+  await page.locator('.key-picker__option', { hasText: 'Sharps · minor' }).click()
+  await page.keyboard.press('Escape')
+  check('choosing minor renames the key', (await keyButton.innerText()).startsWith('E minor'))
+  check('the key menu closes with Escape', (await page.locator('.key-picker__panel').count()) === 0)
+
   // Presets: changes are auto-saved per file and restored when the file is reopened.
   const clickMenu = (label) =>
     app.evaluate(({ Menu }, text) => {
@@ -509,14 +531,16 @@ try {
   const autoSaved = autoFiles.length === 1 ? JSON.parse(readFileSync(join(presetDir, autoFiles[0]), 'utf8')) : null
   check(
     'changes are auto-saved',
-    autoSaved?.tempoFactor === 0.75 && autoSaved.tracks[1].muted === true && autoSaved.tracks[0].label === 'Lead voice'
+    autoSaved?.tempoFactor === 0.75 && autoSaved.tracks[1].muted === true && autoSaved.tracks[0].label === 'Lead voice' &&
+      autoSaved.key?.mode === 'minor'
   )
 
   await page.click('text=Open MIDI') // reopen the same file
   await page.waitForSelector('text=Restored your settings')
   check(
-    'reopening restores tempo, mix and track names',
+    'reopening restores tempo, mix, track names and key',
     (await tempoValue()) === '75' &&
+      (await page.locator('.key-picker__button').innerText()).startsWith('E minor') &&
       (await altoMuted()) === 'true' &&
       (await page.locator('.strip__name').first().innerText()) === 'Lead voice'
   )
@@ -542,6 +566,12 @@ try {
   await clickMenu('Load Preset…')
   await page.waitForSelector('text=Preset loaded')
   check('loading a preset applies it', (await tempoValue()) === '75' && (await altoMuted()) === 'true')
+  await page.locator('.key-picker__button').click()
+  await page.locator('.key-picker__option', { hasText: 'Sharps · major' }).click()
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(800)
+  const keyCleared = JSON.parse(readFileSync(join(presetDir, readdirSync(presetDir)[0]), 'utf8'))
+  check('choosing the file key clears the override', keyCleared.key === undefined)
 
   // Export: render the current mix (tempo is 75% from the preset) and decode the MP3.
   const mp3File = join(USER_DATA, 'export.mp3')

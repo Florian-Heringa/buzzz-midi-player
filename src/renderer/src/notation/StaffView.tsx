@@ -15,15 +15,19 @@ const FOLLOW_POSITION = 0.3
 
 export function StaffView({ song, track }: { song: Song; track: Track }): React.JSX.Element {
   const { zoom, followPlayhead } = useSettings()
-  const layout = useMemo(() => layoutStaff(song, track, { pxPerBeat: zoom }), [song, track, zoom])
+  const accidentals = useAppStore((s) => s.keyChoice?.accidentals)
+  const layout = useMemo(
+    () => layoutStaff(song, track, { pxPerBeat: zoom, accidentals }),
+    [song, track, zoom, accidentals]
+  )
   const scroller = useRef<HTMLDivElement>(null)
   const seek = useAppStore((s) => s.seek)
   const name = useAppStore((s) => trackDisplayName(s, track.id))
 
-  // Back to the start when switching track or song.
+  // Back to the start when switching track or song (not when the key is read differently).
   useEffect(() => {
     if (scroller.current) scroller.current.scrollLeft = 0
-  }, [song, track])
+  }, [song.tracks, track])
 
   // After zooming, bring the playhead back into view.
   useEffect(() => {

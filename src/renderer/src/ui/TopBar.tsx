@@ -1,7 +1,14 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import {
+  enharmonicFifths,
+  keyChoiceFromFile,
+  keyName,
+  type Accidentals,
+  type Mode
+} from '../model/keys'
 import { measureCount } from '../model/measures'
-import { MAX_TEMPO_FACTOR, MIN_TEMPO_FACTOR, useAppStore } from '../store/appStore'
-import { formatTime, keyName } from './format'
+import { MAX_TEMPO_FACTOR, MIN_TEMPO_FACTOR, interpretedSong, useAppStore } from '../store/appStore'
+import { formatTime } from './format'
 
 /** Top pane: file actions, song details, transport, tempo and loop controls. */
 export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
@@ -80,7 +87,7 @@ function LastExport(): React.JSX.Element | null {
 }
 
 function SongSummary(): React.JSX.Element | null {
-  const song = useAppStore((s) => s.song)
+  const song = useAppStore(interpretedSong)
   if (!song) return null
   const timeSig = song.timeSignatures[0]
   const key = song.keySignatures[0]
@@ -99,10 +106,106 @@ function SongSummary(): React.JSX.Element | null {
       {items.map(([label, value]) => (
         <div key={label} className="song-summary__item">
           <dt>{label}</dt>
-          <dd>{value}</dd>
+          <dd>{label === 'Key' ? <KeyPicker name={value} /> : value}</dd>
         </div>
       ))}
     </dl>
+  )
+}
+
+const KEY_OPTIONS: { accidentals: Accidentals; mode: Mode; label: string }[] = [
+  { accidentals: 'sharps', mode: 'major', label: '♯ Sharps · major' },
+  { accidentals: 'sharps', mode: 'minor', label: '♯ Sharps · minor' },
+  { accidentals: 'flats', mode: 'major', label: '♭ Flats · major' },
+  { accidentals: 'flats', mode: 'minor', label: '♭ Flats · minor' }
+]
+
+/**
+ * The key as a button: choose whether it reads on the sharp or flat side (switching to the
+ * enharmonic key where one exists) and as major or minor.
+ */
+function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
+  const fileKey = useAppStore((s) => s.song?.keySignatures[0] ?? null)
+  const keyChoice = useAppStore((s) => s.keyChoice)
+  const setKeyChoice = useAppStore((s) => s.setKeyChoice)
+  const button = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  // Fixed position under the button, so the clipped header can't hide the menu.
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const open = position !== null
+
+  useEffect(() => {
+    if (!open) return
+    const close = (): void => setPosition(null)
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node
+      if (!panel.current?.contains(target) && !button.current?.contains(target)) close()
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        close()
+        button.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', close)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', close)
+    }
+  }, [open])
+
+  if (!fileKey) return null
+  const fromFile = keyChoiceFromFile(fileKey)
+  const current = keyChoice ?? fromFile
+
+  const toggle = (): void => {
+    const rect = button.current?.getBoundingClientRect()
+    setPosition(open || !rect ? null : { top: rect.bottom + 6, left: rect.left })
+  }
+
+  return (
+    <>
+      <button
+        ref={button}
+        className="key-picker__button"
+        onClick={toggle}
+        aria-haspopup="true"
+        aria-expanded={open}
+        title="Change how the key is read"
+      >
+        {name}
+        <span aria-hidden> ▾</span>
+      </button>
+      {open && (
+        <div ref={panel} className="key-picker__panel" role="dialog" aria-label="Key" style={position}>
+          <fieldset>
+            <legend>Read the key as</legend>
+            {KEY_OPTIONS.map((option) => {
+              const fifths = enharmonicFifths(fileKey.fifths, option.accidentals)
+              const isFileKey = option.accidentals === fromFile.accidentals && option.mode === fromFile.mode
+              return (
+                <label key={option.label} className="key-picker__option">
+                  <input
+                    type="radio"
+                    name="key-choice"
+                    checked={current.accidentals === option.accidentals && current.mode === option.mode}
+                    onChange={() => setKeyChoice(option)}
+                  />
+                  <span className="key-picker__label">{option.label}</span>
+                  <span className="key-picker__result">
+                    {keyName(fifths, option.mode)}
+                    {isFileKey && <small> (file)</small>}
+                  </span>
+                </label>
+              )
+            })}
+          </fieldset>
+        </div>
+      )}
+    </>
   )
 }
 

@@ -1,3 +1,4 @@
+import type { Accidentals } from '../model/keys'
 import { measureStarts } from '../model/measures'
 import type { KeySignature, Song, Track } from '../model/song'
 
@@ -34,10 +35,29 @@ export interface SpelledPitch {
   alteration: number
 }
 
-/** Spells a MIDI note with sharps in sharp keys and flats in flat keys. */
-export function spellPitch(midi: number, fifths: number): SpelledPitch {
-  const [letter, alteration] = (fifths < 0 ? FLAT_SPELLING : SHARP_SPELLING)[midi % 12]
-  return { step: Math.floor(midi / 12) * 7 + letter, alteration }
+/** Pitch class of each natural letter, C to B. */
+const NATURAL_PITCH_CLASS = [0, 2, 4, 5, 7, 9, 11]
+
+/**
+ * Spells a MIDI note. Notes in the key use the key's spelling (including E♯, B♯, C♭ and F♭
+ * in extreme keys); other notes use sharps or flats as preferred, by default the key's side.
+ */
+export function spellPitch(midi: number, fifths: number, prefer?: Accidentals): SpelledPitch {
+  const pitchClass = midi % 12
+  for (let letter = 0; letter < 7; letter++) {
+    const alteration = keyAlteration(letter, fifths)
+    if ((NATURAL_PITCH_CLASS[letter] + alteration + 12) % 12 === pitchClass) {
+      return fromLetter(midi, letter, alteration)
+    }
+  }
+  const useFlats = prefer ? prefer === 'flats' : fifths < 0
+  const [letter, alteration] = (useFlats ? FLAT_SPELLING : SHARP_SPELLING)[pitchClass]
+  return fromLetter(midi, letter, alteration)
+}
+
+/** Diatonic step from the letter and alteration (B♯3 sounds as C4 but sits on B3's step). */
+function fromLetter(midi: number, letter: number, alteration: number): SpelledPitch {
+  return { step: Math.floor((midi - alteration) / 12) * 7 + letter, alteration }
 }
 
 /** Alteration the key signature applies to a letter. */
@@ -127,20 +147,27 @@ export interface LayoutOptions {
   pxPerBeat?: number
   /** Width reserved before tick 0 (clef + key signature). */
   originX?: number
+  /** How to spell notes outside the key; defaults to the key's own side. */
+  accidentals?: Accidentals
 }
 
 /** Positions a track's notes on one or two staves, proportionally to time. */
 export function layoutStaff(song: Song, track: Track, options: LayoutOptions = {}): StaffLayout {
   const lineGap = options.lineGap ?? 10
   const pxPerTick = (options.pxPerBeat ?? 80) / song.ppq
-  const originX = options.originX ?? 90
   const half = lineGap / 2
   const clefs = chooseClefs(track)
   const fifths = song.keySignatures[0].fifths
+  // Room for the clef plus every accidental of the key signature (StaffView spaces them
+  // 0.85 line gaps apart, starting 3.6 gaps in); never less than the usual 90px.
+  const originX =
+    options.originX ?? Math.max(90, Math.ceil(lineGap * (3.6 + 0.85 * Math.abs(fifths) + 2.4)))
 
   // Notes are assigned to a staff first so each staff can grow to fit its ledger lines.
   const staffOf = (midi: number): number => (clefs.length === 2 && midi < 60 ? 1 : 0)
-  const spelled = track.notes.map((note) => spellPitch(note.midi, keySignatureAt(song, note.tick).fifths))
+  const spelled = track.notes.map((note) =>
+    spellPitch(note.midi, keySignatureAt(song, note.tick).fifths, options.accidentals)
+  )
 
   // Vertical extent per staff, in half line gaps above the bottom line.
   // The octave clef's "8" hangs below the staff, so reserve room for it.

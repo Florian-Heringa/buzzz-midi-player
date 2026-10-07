@@ -5,6 +5,7 @@ import { buildExportMidi } from '../audio/exportMix'
 import { channelStates, defaultMix, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
+import { keyChoiceFromFile, withKeyChoice, type KeyChoice } from '../model/keys'
 import { stopPosition, updateLoop, type LoopRange } from '../model/loop'
 import { measureCount } from '../model/measures'
 import { parseSong, type Song } from '../model/song'
@@ -38,6 +39,8 @@ interface AppState {
   mixes: TrackMix[]
   /** Custom track names, indexed by track id; '' keeps the name from the file. */
   trackLabels: string[]
+  /** How the key is read; null follows the key signature in the file. */
+  keyChoice: KeyChoice | null
   engineStatus: EngineStatus
   transport: TransportStatus
   positionTick: number
@@ -67,6 +70,8 @@ interface AppState {
   updateMix(trackId: number, change: Partial<TrackMix>): void
   /** Renames a track; an empty name (or the file's own name) restores the file's name. */
   renameTrack(trackId: number, label: string): void
+  /** Chooses how the key is read; picking the file's own reading clears the override. */
+  setKeyChoice(choice: KeyChoice): void
   setExportSettings(change: Partial<ExportSettings>): void
   openExportDialog(): void
   openSettings(): void
@@ -130,7 +135,8 @@ export const useAppStore = create<AppState>((set, get) => {
       tempoFactor: settings.tempoFactor,
       selectedTrackId: settings.selectedTrackId,
       exportSettings: settings.exportSettings,
-      trackLabels: settings.trackLabels
+      trackLabels: settings.trackLabels,
+      keyChoice: settings.keyChoice
     })
     engine?.setTempoFactor(settings.tempoFactor)
     void engine?.setChannels(currentChannelStates())
@@ -141,7 +147,8 @@ export const useAppStore = create<AppState>((set, get) => {
     tempoFactor: 1,
     selectedTrackId: song.tracks[0]?.id ?? null,
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
-    trackLabels: song.tracks.map(() => '')
+    trackLabels: song.tracks.map(() => ''),
+    keyChoice: null
   })
 
   /** Follows the player position while playing and stops at the end of the song. */
@@ -171,6 +178,7 @@ export const useAppStore = create<AppState>((set, get) => {
     selectedTrackId: null,
     mixes: [],
     trackLabels: [],
+    keyChoice: null,
     engineStatus: 'idle',
     transport: 'stopped',
     positionTick: 0,
@@ -265,6 +273,14 @@ export const useAppStore = create<AppState>((set, get) => {
       const clamped = Math.max(MIN_TEMPO_FACTOR, Math.min(MAX_TEMPO_FACTOR, factor))
       set({ tempoFactor: clamped })
       engine?.setTempoFactor(clamped)
+    },
+
+    setKeyChoice: (choice) => {
+      const { song } = get()
+      if (!song) return
+      const fromFile = keyChoiceFromFile(song.keySignatures[0])
+      const same = fromFile.accidentals === choice.accidentals && fromFile.mode === choice.mode
+      set({ keyChoice: same ? null : choice })
     },
 
     renameTrack: (trackId, label) => {
@@ -388,8 +404,12 @@ export const useAppStore = create<AppState>((set, get) => {
     resetSettings: () => {
       const { song } = get()
       if (!song) return
-      // Custom track names are not part of the mix, so they stay.
-      applySettings({ ...defaultSettings(song), trackLabels: get().trackLabels })
+      // Custom track names and the key reading are not part of the mix, so they stay.
+      applySettings({
+        ...defaultSettings(song),
+        trackLabels: get().trackLabels,
+        keyChoice: get().keyChoice
+      })
       get().showNotice('Mix and tempo reset')
     },
 
@@ -417,7 +437,8 @@ useAppStore.subscribe((state, prev) => {
     state.tempoFactor !== prev.tempoFactor ||
     state.selectedTrackId !== prev.selectedTrackId ||
     state.exportSettings !== prev.exportSettings ||
-    state.trackLabels !== prev.trackLabels
+    state.trackLabels !== prev.trackLabels ||
+    state.keyChoice !== prev.keyChoice
   if (!changed) return
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(() => {
@@ -433,4 +454,21 @@ useAppStore.subscribe((state, prev) => {
 export function trackDisplayName(state: Pick<AppState, 'song' | 'trackLabels'>, trackId: number | null): string {
   if (trackId === null) return ''
   return state.trackLabels[trackId] || state.song?.tracks[trackId]?.name || ''
+}
+
+/** The song with its key read according to the user's choice; stable while neither changes. */
+let interpreted: { song: Song | null; choice: KeyChoice | null; result: Song | null } = {
+  song: null,
+  choice: null,
+  result: null
+}
+export function interpretedSong(state: Pick<AppState, 'song' | 'keyChoice'>): Song | null {
+  if (state.song !== interpreted.song || state.keyChoice !== interpreted.choice) {
+    interpreted = {
+      song: state.song,
+      choice: state.keyChoice,
+      result: state.song ? withKeyChoice(state.song, state.keyChoice) : null
+    }
+  }
+  return interpreted.result
 }

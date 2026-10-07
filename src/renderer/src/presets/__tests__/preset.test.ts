@@ -16,7 +16,8 @@ const settingsFor = (song: Song): PlayerSettings => ({
   tempoFactor: 0.75,
   selectedTrackId: 1,
   exportSettings: { bitrate: 128, mode: 'practice-muted' },
-  trackLabels: song.tracks.map((_, i) => (i === 0 ? 'Me' : ''))
+  trackLabels: song.tracks.map((_, i) => (i === 0 ? 'Me' : '')),
+  keyChoice: { accidentals: 'flats', mode: 'minor' }
 })
 
 describe('presets', () => {
@@ -91,5 +92,10 @@ describe('presets', () => {
       tracks: [{ name: 'A', label: '  ' + 'x'.repeat(80) }, { name: 'B', label: '   ' }, { name: 'C', label: 5 }]
     })
     expect(labelled.tracks.map((t) => t.label?.length)).toEqual([60, undefined, undefined])
+    expect(parsePreset({ version: 1, tracks: [], key: { accidentals: 'flats', mode: 'minor' } }).key).toEqual({
+      accidentals: 'flats',
+      mode: 'minor'
+    })
+    expect(parsePreset({ version: 1, tracks: [], key: { accidentals: 'both', mode: 'minor' } }).key).toBeUndefined()
   })
 })
