@@ -968,3 +968,56 @@ select {
   display: flex;
   justify-content: flex-end;
 }
+
+/* ---- Sheet music (VexFlow) ---- */
+
+/* VexFlow draws in currentColor; these set the colors per part of the drawing. */
+.sheet-view {
+  color: var(--note);
+}
+
+.sheet-view__drawing {
+  width: max-content;
+  cursor: pointer;
+}
+
+.sheet-view__drawing svg {
+  display: block;
+}
+
+.sheet-view .vf-stave,
+.sheet-view .vf-stavebarline,
+.sheet-view .vf-staveconnector {
+  color: var(--staff-line);
+}
+
+.sheet-view .vf-measure-number,
+.sheet-view .sheet-rest {
+  color: var(--note);
+}
+
+.sheet-view .sheet-note--sounding {
+  color: var(--note-sounding);
+}
+
+.sheet-view .staff__playhead {
+  pointer-events: none;
+}
+
+/* Clef and key pinned over the left edge while the music scrolls. */
+.sheet-view__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: var(--staff-bg, var(--panel));
+  pointer-events: none;
+}
+
+.sheet-view__header svg {
+  display: block;
+}
+
+.sheet-view__loading {
+  margin: 0;
+  padding: 16px;
+}

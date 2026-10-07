@@ -1,4 +1,5 @@
 import { useState, type DragEvent } from 'react'
+import { SheetView } from './notation/sheet/SheetView'
 import { StaffView } from './notation/StaffView'
 import { interpretedSong, useAppStore } from './store/appStore'
 import { ExportDialog } from './ui/ExportDialog'
@@ -60,7 +61,7 @@ export default function App(): React.JSX.Element {
                 ) : noteDisplay === 'piano-roll' ? (
                   <StaffView song={keyedSong ?? song} track={selectedTrack} />
                 ) : (
-                  <p className="placeholder">Sheet music display is not available yet.</p>
+                  <SheetView song={keyedSong ?? song} track={selectedTrack} />
                 ))}
             </>
           ) : (

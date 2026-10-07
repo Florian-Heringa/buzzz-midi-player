@@ -185,9 +185,9 @@ try {
   )
   check('every settings option is visible', optionsVisible)
   check(
-    'piano roll is the note display; sheet music is not available yet',
+    'piano roll is the default note display; sheet music is available',
     (await page.isChecked('input[name="note-display"][value="piano-roll"]')) &&
-      (await page.isDisabled('input[name="note-display"][value="sheet-music"]'))
+      !(await page.isDisabled('input[name="note-display"][value="sheet-music"]'))
   )
   await page.check('input[name="theme"][value="modern"]')
   await page.check('input[name="color-mode"][value="system"]')
@@ -407,6 +407,46 @@ try {
   await page.keyboard.press('Escape')
   check('Escape cancels a rename', (await page.locator('.strip__name').nth(1).innerText()) === 'Alto')
   await page.screenshot({ path: resolve(SHOT_DIR, 'fitted-layout.png') })
+
+  // Sheet music: notation for the practice part, with the same playhead behaviour.
+  await page.click('.settings-button')
+  await page.check('input[name="note-display"][value="sheet-music"]')
+  await page.click('.settings-dialog >> text=Done')
+  await page.waitForSelector('.sheet-view__drawing svg')
+  const sheetNotes = await page.locator('.sheet-view .sheet-note').count()
+  const selectedNotes = Number(
+    (await page.locator('.strip--selected .strip__meta').getAttribute('title')).match(/(\d+) notes/)[1]
+  )
+  check('sheet music shows every note of the practice part', sheetNotes === selectedNotes, `${sheetNotes}/${selectedNotes}`)
+  check(
+    'sheet music has bars, a clef and a key signature',
+    (await page.locator('.sheet-view .vf-stave').count()) >= 8 &&
+      (await page.locator('.sheet-view__drawing .vf-clef').count()) === 1 &&
+      (await page.locator('.sheet-view__drawing .vf-keysignature').count()) === 1
+  )
+  const sheetPlayheadX = () => page.locator('.sheet-view .staff__playhead').evaluate((l) => Number(l.getAttribute('x1')))
+  const sheetStartX = await sheetPlayheadX()
+  await page.click('.transport__play')
+  await page.waitForTimeout(1500)
+  const sheetLaterX = await sheetPlayheadX()
+  check('the sheet playhead moves with playback', sheetLaterX > sheetStartX + 50, `${Math.round(sheetStartX)} → ${Math.round(sheetLaterX)}`)
+  check('a sounding note is highlighted on the sheet', (await page.locator('.sheet-note--sounding').count()) > 0)
+  await page.click('.transport__play') // pause
+  await page.waitForTimeout(200)
+  // Clicking bar 3 of the sheet moves the playhead there (bar 3 starts at tick 3840).
+  const bar3 = await page.evaluate(() => {
+    const staves = [...document.querySelectorAll('.sheet-view__drawing .vf-stave')]
+    return staves[2].getBoundingClientRect()
+  })
+  await page.mouse.click(bar3.left + 40, bar3.top + bar3.height / 2)
+  const seekedTick = Number(await page.locator('.transport__position').inputValue())
+  check('clicking the sheet seeks', seekedTick >= 3840 && seekedTick < 4800, `tick ${seekedTick}`)
+  await page.screenshot({ path: resolve(SHOT_DIR, 'sheet-music.png') })
+  await page.click('button[aria-label="Stop"]')
+  await page.click('.settings-button')
+  await page.check('input[name="note-display"][value="piano-roll"]')
+  await page.click('.settings-dialog >> text=Done')
+  await page.waitForSelector('.staff-view__svg')
 
   await page.click('.transport__play')
   await page.waitForTimeout(500)

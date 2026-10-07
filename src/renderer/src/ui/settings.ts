@@ -38,8 +38,8 @@ export const NOTE_DISPLAYS: { value: NoteDisplay; label: string; hint: string; a
   {
     value: 'sheet-music',
     label: 'Sheet music',
-    hint: 'Standard notation with note values, rests and ties. Coming next.',
-    available: false
+    hint: 'Standard notation with note values, rests, ties and beams. Rhythms are rounded to sixteenth notes.',
+    available: true
   }
 ]
 
