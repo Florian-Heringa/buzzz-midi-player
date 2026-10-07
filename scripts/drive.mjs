@@ -589,13 +589,22 @@ try {
   await page.check('input[name="color-mode"][value="system"]')
   await page.click('.settings-dialog >> text=Done')
   await page.screenshot({ path: resolve(SHOT_DIR, 'sheet-music.png') })
-  // Zooming out shrinks the whole sheet (spacing can't shrink without notes colliding).
-  const sheetWidth = () => page.locator('.sheet-view__drawing svg').evaluate((svg) => svg.getBoundingClientRect().width)
-  const sheetWidthAtDefault = await sheetWidth()
+  // Zooming changes only the spacing: the sheet gets narrower or wider, never shorter or taller.
+  const sheetSize = () =>
+    page.locator('.sheet-view__drawing svg').evaluate((svg) => {
+      const box = svg.getBoundingClientRect()
+      return { width: box.width, height: box.height }
+    })
+  const sheetAtDefault = await sheetSize()
   await setRange('.zoom-control input', 40)
   await page.waitForTimeout(300) // the sheet redraws once zooming settles
-  const sheetWidthZoomedOut = await sheetWidth()
-  check('zooming out shrinks the sheet', Math.abs(sheetWidthZoomedOut / sheetWidthAtDefault - 0.5) < 0.02, `${Math.round(sheetWidthAtDefault)} → ${Math.round(sheetWidthZoomedOut)}px`)
+  const sheetZoomedOut = await sheetSize()
+  check('zooming out narrows the sheet', sheetZoomedOut.width < sheetAtDefault.width * 0.75, `${Math.round(sheetAtDefault.width)} → ${Math.round(sheetZoomedOut.width)}px`)
+  check('zooming out keeps the sheet height', sheetZoomedOut.height === sheetAtDefault.height, `${sheetAtDefault.height} → ${sheetZoomedOut.height}px`)
+  await setRange('.zoom-control input', 160)
+  await page.waitForTimeout(300)
+  const sheetZoomedIn = await sheetSize()
+  check('zooming in widens the sheet but keeps its height', sheetZoomedIn.width > sheetAtDefault.width * 1.5 && sheetZoomedIn.height === sheetAtDefault.height, `${Math.round(sheetZoomedIn.width)} × ${sheetZoomedIn.height}px`)
   await page.locator('.zoom-control__label').dblclick()
   await page.click('button[aria-label="Stop"]')
   await viewButton('Piano roll').click()

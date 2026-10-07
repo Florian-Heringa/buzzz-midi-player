@@ -58,8 +58,6 @@ type Anchor = [tick: number, x: number]
 
 interface Rendered {
   width: number
-  /** Drawing size relative to its coordinates (below 1 when zoomed out). */
-  visualScale: number
   /** Start and end of every bar; time runs linearly between them. */
   anchors: Anchor[]
   notes: { start: number; end: number; el: SVGElement }[]
@@ -109,8 +107,9 @@ const MIN_LEAD = 12
  * Notes are placed in proportion to time (x = start + ticks × scale), so the playhead and
  * following move at a constant speed. At 100% zoom the scale is the tightest that keeps the
  * notes clear (say sixteenths with accidentals) in nearly all bars; the busiest few bars are
- * widened individually so they don't stretch the whole song. Zooming in spreads the notes;
- * zooming out shrinks the whole drawing, symbols included.
+ * widened individually so they don't stretch the whole song. Zoom changes only the spacing,
+ * never the height: zooming in spreads the notes, zooming out brings them closer (the busiest
+ * bars too, so far out their notes can touch).
  */
 function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number): Rendered {
   const clefs = sheet.clefs.map(clefInfo)
@@ -164,9 +163,8 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
   })
   const sortedNeeds = [...barNeeds].sort((a, b) => a - b)
   const typicalNeed = sortedNeeds[Math.floor((sortedNeeds.length - 1) * SCALE_PERCENTILE)] ?? 0
-  const songScale = Math.max(BASE_PX_PER_UNIT, typicalNeed) * Math.max(1, zoomFactor)
-  const visualScale = Math.min(1, zoomFactor)
-  const barScales = barNeeds.map((need) => Math.max(songScale, need))
+  const songScale = Math.max(BASE_PX_PER_UNIT, typicalNeed) * zoomFactor
+  const barScales = barNeeds.map((need) => Math.max(songScale, need * Math.min(1, zoomFactor)))
 
   // Pass 2: place everything by time and draw.
   const renderer = new Renderer(container, Renderer.Backends.SVG)
@@ -274,12 +272,12 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
   // span the font's full line height, far beyond the visible symbol.)
   const height = maxY - minY
   svg.setAttribute('viewBox', `0 ${minY} ${width} ${height}`)
-  svg.setAttribute('width', String(width * visualScale))
-  svg.setAttribute('height', String(height * visualScale))
-  svg.style.width = `${width * visualScale}px`
-  svg.style.height = `${height * visualScale}px`
+  svg.setAttribute('width', String(width))
+  svg.setAttribute('height', String(height))
+  svg.style.width = `${width}px`
+  svg.style.height = `${height}px`
 
-  return { width, visualScale, anchors, notes, top: lineTop - 14, bottom: lineBottom + 14 }
+  return { width, anchors, notes, top: lineTop - 14, bottom: lineBottom + 14 }
 }
 
 function makeNote(event: SheetEvent, clef: Clef, octaveShift: number): StaveNote {
@@ -333,7 +331,7 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
   const renderedRef = useRef<Rendered | null>(null)
   const takeZoomAnchor = useWheelZoom(scroller, (px) => {
     const current = renderedRef.current
-    return current ? interpolate(current.anchors, px / current.visualScale, 1) : null
+    return current ? interpolate(current.anchors, px, 1) : null
   })
 
   // VexFlow measures with the music font, so it has to be loaded first.
@@ -357,14 +355,14 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
       drawnSheet.current = sheet
       renderedRef.current = result
       setRendered(result)
-      if (header.current) renderHeader(header.current, sheet, el.querySelector('svg')!, result.visualScale)
+      if (header.current) renderHeader(header.current, sheet, el.querySelector('svg')!)
 
       // Keep the spot under the mouse (wheel zoom) or bring the playhead into view.
       const view = scroller.current
       if (!view) return
       const anchor = takeZoomAnchor()
       const tick = anchor?.tick ?? useAppStore.getState().positionTick
-      const x = interpolate(result.anchors, tick, 0) * result.visualScale
+      const x = interpolate(result.anchors, tick, 0)
       if (anchor) view.scrollLeft = x - anchor.offset
       else if (tick > 0) view.scrollLeft = x - view.clientWidth * FOLLOW_POSITION
     }
@@ -401,7 +399,7 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
       sounding = now
       const el = scroller.current
       if (playing && followPlayhead && el) {
-        el.scrollLeft = x * rendered.visualScale - el.clientWidth * FOLLOW_POSITION
+        el.scrollLeft = x - el.clientWidth * FOLLOW_POSITION
       }
     }
     const state = useAppStore.getState()
@@ -448,12 +446,11 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
   )
 }
 
-/** Clef and key signature pinned to the left edge, matching the drawing's scale and offset. */
+/** Clef and key signature pinned to the left edge, matching the drawing's offset. */
 function renderHeader(
   container: HTMLDivElement,
   sheet: Sheet,
-  drawing: SVGSVGElement,
-  visualScale: number
+  drawing: SVGSVGElement
 ): void {
   container.replaceChildren()
   const first = sheet.measures[0]
@@ -485,8 +482,8 @@ function renderHeader(
   renderer.resize(width, viewBox[3])
   const svg = container.querySelector('svg')!
   svg.setAttribute('viewBox', `0 ${viewBox[1]} ${width} ${viewBox[3]}`)
-  svg.setAttribute('width', String(width * visualScale))
-  svg.setAttribute('height', String(viewBox[3] * visualScale))
-  svg.style.width = `${width * visualScale}px`
-  svg.style.height = `${viewBox[3] * visualScale}px`
+  svg.setAttribute('width', String(width))
+  svg.setAttribute('height', String(viewBox[3]))
+  svg.style.width = `${width}px`
+  svg.style.height = `${viewBox[3]}px`
 }
