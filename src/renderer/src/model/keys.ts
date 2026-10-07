@@ -3,10 +3,15 @@ import type { KeySignature, Song } from './song'
 export type Accidentals = 'sharps' | 'flats'
 export type Mode = 'major' | 'minor'
 
+/** Where the key comes from: the file's key signature or the estimate from the notes. */
+export type KeySource = 'file' | 'estimate'
+
 /** How the user wants the song's key read: sharp or flat side, and major or minor. */
 export interface KeyChoice {
   accidentals: Accidentals
   mode: Mode
+  /** Defaults to 'file'. */
+  source?: KeySource
 }
 
 /** The interpretation that matches the key signature in the file. */
@@ -24,9 +29,40 @@ export function enharmonicFifths(fifths: number, accidentals: Accidentals): numb
   return fifths
 }
 
+/**
+ * True when the file has a key signature and the notes suggest a different one (not just its
+ * enharmonic twin or relative major/minor, which the sharps/flats and mode choices cover).
+ */
+export function estimateDiffersFromFile(song: Song): boolean {
+  const fileKey = song.keySignatures[0]
+  const estimate = song.estimatedKey
+  if (!estimate || fileKey.estimated) return false
+  return enharmonicFifths(estimate.fifths, 'sharps') !== enharmonicFifths(fileKey.fifths, 'sharps')
+}
+
+/** The key a source starts from: the file's first key signature or the estimate. */
+export function sourceKey(song: Song, source: KeySource): KeySignature {
+  if (source === 'estimate' && song.estimatedKey) return { tick: 0, ...song.estimatedKey, estimated: true }
+  return song.keySignatures[0]
+}
+
 /** The song with every key signature read according to the choice (or unchanged without one). */
 export function withKeyChoice(song: Song, choice: KeyChoice | null): Song {
   if (!choice) return song
+  if (choice.source === 'estimate' && song.estimatedKey) {
+    // The estimate covers the whole song, replacing the file's key signatures.
+    return {
+      ...song,
+      keySignatures: [
+        {
+          tick: 0,
+          fifths: enharmonicFifths(song.estimatedKey.fifths, choice.accidentals),
+          mode: choice.mode,
+          estimated: true
+        }
+      ]
+    }
+  }
   return {
     ...song,
     keySignatures: song.keySignatures.map((key) => ({

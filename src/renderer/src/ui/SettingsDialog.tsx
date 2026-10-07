@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useAppStore } from '../store/appStore'
 import {
+  CHANNEL_TRACK_OPTIONS,
   DEFAULT_SETTINGS,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -14,6 +15,7 @@ import { COLOR_MODES, setThemePrefs, THEMES, useThemePrefs } from './theme'
 export function SettingsDialog(): React.JSX.Element | null {
   const open = useAppStore((s) => s.settingsOpen)
   const close = useAppStore((s) => s.closeSettings)
+  const reloadFile = useAppStore((s) => s.reloadFile)
   const settings = useSettings()
   const theme = useThemePrefs()
   const dialog = useRef<HTMLDialogElement>(null)
@@ -119,6 +121,35 @@ export function SettingsDialog(): React.JSX.Element | null {
             {Math.round((settings.zoom / DEFAULT_SETTINGS.zoom) * 100)}%
           </span>
         </label>
+
+        <fieldset>
+          <legend>MIDI tracks with several channels</legend>
+          {CHANNEL_TRACK_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className="settings-dialog__option settings-dialog__option--described"
+            >
+              <input
+                type="radio"
+                name="channel-tracks"
+                value={option.value}
+                checked={settings.channelTracks === option.value}
+                onChange={() => {
+                  updateSettings({ channelTracks: option.value })
+                  void reloadFile()
+                }}
+              />
+              <span>
+                {option.label}
+                <small>{option.hint}</small>
+              </span>
+            </label>
+          ))}
+          <small className="settings-dialog__footnote">
+            Single-track (Type 0) MIDI files are always split by channel, since all their parts
+            share one track.
+          </small>
+        </fieldset>
 
         <label className="settings-dialog__option">
           <input

@@ -55,6 +55,33 @@ describe('parseSong', () => {
     ])
   })
 
+  it('combines a multi-channel track into one track by default, keeping drums apart', () => {
+    // Type 1: one track mostly on channel 3 (strings), with stray notes on channel 1 and drums.
+    const data = buildMidi([
+      [tempo(0, 120)],
+      [
+        trackName('Keys'),
+        program(0, 2, 48),
+        ...note(0, 60, 480, 2),
+        ...note(480, 62, 480, 2),
+        ...note(960, 64, 480, 0),
+        ...note(0, 36, 240, 9)
+      ]
+    ])
+    const combined = parseSong(data, 'x.mid')
+    expect(combined.tracks.map((t) => [t.name, t.sourceChannel, t.program, t.isDrum, t.notes.length])).toEqual([
+      ['Keys', 2, 48, false, 3],
+      ['Keys (drums)', 9, 0, true, 1]
+    ])
+    const split = parseSong(data, 'x.mid', { channelTracks: 'split' })
+    expect(split.tracks.map((t) => t.name)).toEqual(['Keys (ch 1)', 'Keys (ch 3)', 'Keys (ch 10)'])
+  })
+
+  it('always splits a Type 0 file by channel', () => {
+    const data = buildMidi([[...note(0, 72, 480, 0), ...note(0, 48, 480, 1)]], { format: 0 })
+    expect(parseSong(data, 'x.mid', { channelTracks: 'combine' }).tracks).toHaveLength(2)
+  })
+
   it('treats note-on with velocity 0 as note-off and pairs repeated pitches in order', () => {
     const data = buildMidi([
       [

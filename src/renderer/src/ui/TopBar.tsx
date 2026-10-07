@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import {
   enharmonicFifths,
+  estimateDiffersFromFile,
   keyChoiceFromFile,
   keyName,
+  sourceKey,
   type Accidentals,
+  type KeyChoice,
+  type KeySource,
   type Mode
 } from '../model/keys'
 import { measureCount } from '../model/measures'
@@ -125,7 +129,7 @@ const KEY_OPTIONS: { accidentals: Accidentals; mode: Mode; label: string }[] = [
  * enharmonic key where one exists) and as major or minor.
  */
 function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
-  const fileKey = useAppStore((s) => s.song?.keySignatures[0] ?? null)
+  const song = useAppStore((s) => s.song)
   const keyChoice = useAppStore((s) => s.keyChoice)
   const setKeyChoice = useAppStore((s) => s.setKeyChoice)
   const button = useRef<HTMLButtonElement>(null)
@@ -157,9 +161,16 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
     }
   }, [open])
 
-  if (!fileKey) return null
-  const fromFile = keyChoiceFromFile(fileKey)
-  const current = keyChoice ?? fromFile
+  if (!song) return null
+  const fileKey = song.keySignatures[0]
+  const current: KeyChoice = keyChoice ?? { ...keyChoiceFromFile(fileKey), source: 'file' }
+  const source: KeySource = current.source ?? 'file'
+  const offerEstimate = estimateDiffersFromFile(song)
+  // The four readings below apply to the key of the chosen source.
+  const baseKey = sourceKey(song, source)
+  const baseReading = keyChoiceFromFile(baseKey)
+  const chooseSource = (next: KeySource): void =>
+    setKeyChoice({ ...keyChoiceFromFile(sourceKey(song, next)), source: next })
 
   const toggle = (): void => {
     const rect = button.current?.getBoundingClientRect()
@@ -185,26 +196,49 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
       </button>
       {open && (
         <div ref={panel} className="key-picker__panel" role="dialog" aria-label="Key" style={position}>
+          {offerEstimate && song.estimatedKey && (
+            <fieldset className="key-picker__sources">
+              <legend>Key signature</legend>
+              {(['file', 'estimate'] as const).map((option) => {
+                const key = sourceKey(song, option)
+                return (
+                  <label key={option} className="key-picker__option">
+                    <input
+                      type="radio"
+                      name="key-source"
+                      checked={source === option}
+                      onChange={() => chooseSource(option)}
+                    />
+                    <span className="key-picker__label">
+                      {option === 'file' ? 'From the file' : 'Estimated from the notes'}
+                    </span>
+                    <span className="key-picker__result">{keyName(key.fifths, key.mode)}</span>
+                  </label>
+                )
+              })}
+            </fieldset>
+          )}
           <fieldset>
             <legend>Read the key as</legend>
             {fileKey.estimated && (
               <p className="key-picker__note">This file has no key signature, so the key was estimated from the notes.</p>
             )}
             {KEY_OPTIONS.map((option) => {
-              const fifths = enharmonicFifths(fileKey.fifths, option.accidentals)
-              const isFileKey = option.accidentals === fromFile.accidentals && option.mode === fromFile.mode
+              const fifths = enharmonicFifths(baseKey.fifths, option.accidentals)
+              const isBaseReading =
+                option.accidentals === baseReading.accidentals && option.mode === baseReading.mode
               return (
                 <label key={option.label} className="key-picker__option">
                   <input
                     type="radio"
                     name="key-choice"
                     checked={current.accidentals === option.accidentals && current.mode === option.mode}
-                    onChange={() => setKeyChoice(option)}
+                    onChange={() => setKeyChoice({ ...option, source })}
                   />
                   <span className="key-picker__label">{option.label}</span>
                   <span className="key-picker__result">
                     {keyName(fifths, option.mode)}
-                    {isFileKey && <small> ({fileKey.estimated ? 'estimated' : 'file'})</small>}
+                    {isBaseReading && <small> ({baseKey.estimated ? 'estimated' : 'file'})</small>}
                   </span>
                 </label>
               )

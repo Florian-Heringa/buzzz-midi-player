@@ -47,6 +47,8 @@ export interface Song {
   tempoMap: TempoMap
   timeSignatures: TimeSignature[]
   keySignatures: KeySignature[]
+  /** Key estimated from the notes, whether or not the file has a key signature. */
+  estimatedKey: Omit<KeySignature, 'tick'> | null
   tracks: Track[]
 }
 
@@ -66,7 +68,15 @@ interface SourceTrack {
   parts: Map<number, ChannelPart>
 }
 
-export function parseSong(data: ArrayLike<number>, name: string): Song {
+/** What to do with a track that has notes on several MIDI channels. */
+export type ChannelTracks = 'combine' | 'split'
+
+export interface ParseOptions {
+  /** Defaults to 'combine'. Single-track (Type 0) files are always split by channel. */
+  channelTracks?: ChannelTracks
+}
+
+export function parseSong(data: ArrayLike<number>, name: string, options: ParseOptions = {}): Song {
   const midi = parseMidi(data)
   const ppq = midi.header.ticksPerBeat
   if (!ppq) {
@@ -157,7 +167,9 @@ export function parseSong(data: ArrayLike<number>, name: string): Song {
     sourceTracks.push(source)
   }
 
-  const tracks = buildTracks(sourceTracks)
+  // In a Type 0 file every part shares the one track, so channels are what separate them.
+  const channelTracks = midi.header.format === 0 ? 'split' : (options.channelTracks ?? 'combine')
+  const tracks = buildTracks(sourceTracks, channelTracks)
   for (const track of tracks) {
     for (const note of track.notes) {
       durationTicks = Math.max(durationTicks, note.tick + note.durationTicks)
@@ -172,6 +184,7 @@ export function parseSong(data: ArrayLike<number>, name: string): Song {
     tempoMap: new TempoMap(ppq, tempos),
     timeSignatures: normalizeByTick(timeSignatures, { tick: 0, numerator: 4, denominator: 4 }),
     keySignatures: resolveKeySignatures(keySignatures, tracks),
+    estimatedKey: estimateKey(tracks),
     tracks
   }
 }
@@ -186,27 +199,70 @@ function resolveKeySignatures(fromFile: KeySignature[], tracks: Track[]): KeySig
   return [estimate ? { tick: 0, ...estimate, estimated: true } : { tick: 0, fifths: 0, mode: 'major' }]
 }
 
-/** One Track per (source track, channel) that has notes; multi-channel tracks are split. */
-function buildTracks(sourceTracks: SourceTrack[]): Track[] {
+/** Notes that become one Track, with an optional suffix for its name. */
+interface TrackGroup {
+  channel: number
+  program: number
+  notes: Note[]
+  suffix?: string
+}
+
+/**
+ * Turns source tracks into Tracks. With 'split', a track using several channels becomes one
+ * Track per channel. With 'combine', its melodic channels become one Track (on the channel and
+ * instrument with the most notes); drum-channel notes always stay separate.
+ */
+function buildTracks(sourceTracks: SourceTrack[], channelTracks: ChannelTracks): Track[] {
   const tracks: Track[] = []
   sourceTracks.forEach((source, sourceIndex) => {
-    const channels = [...source.parts.entries()]
+    const parts = [...source.parts.entries()]
       .filter(([, part]) => part.notes.length > 0)
       .sort(([a], [b]) => a - b)
-    const split = channels.length > 1
 
-    for (const [channel, part] of channels) {
-      const isDrum = channel === DRUM_CHANNEL
-      const program = part.program ?? 0
+    const groups: TrackGroup[] = []
+    if (channelTracks === 'split' || parts.length <= 1) {
+      for (const [channel, part] of parts) {
+        groups.push({
+          channel,
+          program: part.program ?? 0,
+          notes: part.notes,
+          suffix: parts.length > 1 ? `ch ${channel + 1}` : undefined
+        })
+      }
+    } else {
+      const melodic = parts.filter(([channel]) => channel !== DRUM_CHANNEL)
+      const drums = parts.find(([channel]) => channel === DRUM_CHANNEL)
+      if (melodic.length > 0) {
+        const [mainChannel, mainPart] = melodic.reduce((most, candidate) =>
+          candidate[1].notes.length > most[1].notes.length ? candidate : most
+        )
+        groups.push({
+          channel: mainChannel,
+          program: mainPart.program ?? 0,
+          notes: melodic.flatMap(([, part]) => part.notes)
+        })
+      }
+      if (drums) {
+        groups.push({
+          channel: DRUM_CHANNEL,
+          program: drums[1].program ?? 0,
+          notes: drums[1].notes,
+          suffix: melodic.length > 0 ? 'drums' : undefined
+        })
+      }
+    }
+
+    for (const group of groups) {
+      const isDrum = group.channel === DRUM_CHANNEL
       const baseName =
-        source.name ?? (isDrum ? 'Drums' : `${gmProgramName(program)} ${sourceIndex + 1}`)
+        source.name ?? (isDrum ? 'Drums' : `${gmProgramName(group.program)} ${sourceIndex + 1}`)
       tracks.push({
         id: tracks.length,
-        name: split ? `${baseName} (ch ${channel + 1})` : baseName,
-        sourceChannel: channel,
-        program,
+        name: group.suffix ? `${baseName} (${group.suffix})` : baseName,
+        sourceChannel: group.channel,
+        program: group.program,
         isDrum,
-        notes: part.notes.sort((a, b) => a.tick - b.tick || a.midi - b.midi)
+        notes: group.notes.sort((a, b) => a.tick - b.tick || a.midi - b.midi)
       })
     }
   })

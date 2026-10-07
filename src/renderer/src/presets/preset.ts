@@ -184,7 +184,13 @@ export function parsePreset(json: unknown): Preset {
     ...(keyJson &&
     (keyJson.accidentals === 'sharps' || keyJson.accidentals === 'flats') &&
     (keyJson.mode === 'major' || keyJson.mode === 'minor')
-      ? { key: { accidentals: keyJson.accidentals, mode: keyJson.mode } }
+      ? {
+          key: {
+            accidentals: keyJson.accidentals,
+            mode: keyJson.mode,
+            ...(keyJson.source === 'estimate' ? { source: 'estimate' as const } : {})
+          }
+        }
       : {})
   }
 }

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { accidentalFor, layoutStaff, spellPitch } from '../../notation/staffLayout'
-import { enharmonicFifths, keyChoiceFromFile, keyName, withKeyChoice } from '../keys'
+import {
+  enharmonicFifths,
+  estimateDiffersFromFile,
+  keyChoiceFromFile,
+  keyName,
+  sourceKey,
+  withKeyChoice
+} from '../keys'
 import { parseSong, type Song } from '../song'
 import { buildMidi, note } from './midiBuilder'
 
@@ -35,6 +42,31 @@ describe('key interpretation', () => {
     expect(withKeyChoice(sixSharps, null)).toBe(sixSharps)
     expect(withKeyChoice(sixSharps, { accidentals: 'flats', mode: 'minor' }).keySignatures).toEqual([
       { tick: 0, fifths: -6, mode: 'minor' }
+    ])
+  })
+})
+
+describe('estimated key as an alternative to the file key', () => {
+  const base = parseSong(buildMidi([note(0, 60, 480)]), 'x.mid')
+  const song = (fileFifths: number, estimateFifths: number, estimated = false): Song => ({
+    ...base,
+    keySignatures: [{ tick: 0, fifths: fileFifths, mode: 'major', ...(estimated ? { estimated } : {}) }],
+    estimatedKey: { fifths: estimateFifths, mode: 'minor' }
+  })
+
+  it('is offered only when the estimate is a different key signature', () => {
+    expect(estimateDiffersFromFile(song(0, 3))).toBe(true) // file says C, notes say A/F♯m
+    expect(estimateDiffersFromFile(song(3, 3))).toBe(false) // same signature, other mode
+    expect(estimateDiffersFromFile(song(6, -6))).toBe(false) // enharmonic twins
+    expect(estimateDiffersFromFile(song(3, 0, true))).toBe(false) // no key in file: already the estimate
+  })
+
+  it('reads the whole song in the estimated key when chosen', () => {
+    const withFileKey = song(0, 3)
+    expect(sourceKey(withFileKey, 'estimate')).toEqual({ tick: 0, fifths: 3, mode: 'minor', estimated: true })
+    expect(sourceKey(withFileKey, 'file').fifths).toBe(0)
+    expect(withKeyChoice(withFileKey, { source: 'estimate', accidentals: 'sharps', mode: 'major' }).keySignatures).toEqual([
+      { tick: 0, fifths: 3, mode: 'major', estimated: true }
     ])
   })
 })

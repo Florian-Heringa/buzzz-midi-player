@@ -9,6 +9,7 @@ import { keyChoiceFromFile, withKeyChoice, type KeyChoice } from '../model/keys'
 import { stopPosition, updateLoop, type LoopRange } from '../model/loop'
 import { measureCount } from '../model/measures'
 import { parseSong, type Song } from '../model/song'
+import { getSettings } from '../ui/settings'
 import {
   applyPreset,
   createPreset,
@@ -60,6 +61,8 @@ interface AppState {
   notice: string | null
 
   loadFile(file: LoadedMidiFile): Promise<void>
+  /** Parses the open file again, e.g. after a setting that affects its tracks changed. */
+  reloadFile(): Promise<void>
   selectTrack(trackId: number): void
   play(): Promise<void>
   pause(): Promise<void>
@@ -195,7 +198,7 @@ export const useAppStore = create<AppState>((set, get) => {
     loadFile: async (file) => {
       let song: Song
       try {
-        song = parseSong(file.data, file.name)
+        song = parseSong(file.data, file.name, { channelTracks: getSettings().channelTracks })
         if (song.tracks.length === 0) throw new Error('This MIDI file contains no notes.')
       } catch (err) {
         set({ error: `Could not open ${file.name}: ${errorText(err)}` })
@@ -233,6 +236,11 @@ export const useAppStore = create<AppState>((set, get) => {
       } catch (err) {
         set({ error: `Could not prepare playback: ${errorText(err)}` })
       }
+    },
+
+    reloadFile: async () => {
+      const { file } = get()
+      if (file) await get().loadFile(file)
     },
 
     selectTrack: (selectedTrackId) => set({ selectedTrackId }),
@@ -279,7 +287,10 @@ export const useAppStore = create<AppState>((set, get) => {
       const { song } = get()
       if (!song) return
       const fromFile = keyChoiceFromFile(song.keySignatures[0])
-      const same = fromFile.accidentals === choice.accidentals && fromFile.mode === choice.mode
+      const same =
+        (choice.source ?? 'file') === 'file' &&
+        fromFile.accidentals === choice.accidentals &&
+        fromFile.mode === choice.mode
       set({ keyChoice: same ? null : choice })
     },
 

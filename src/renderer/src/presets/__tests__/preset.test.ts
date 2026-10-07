@@ -97,5 +97,10 @@ describe('presets', () => {
       mode: 'minor'
     })
     expect(parsePreset({ version: 1, tracks: [], key: { accidentals: 'both', mode: 'minor' } }).key).toBeUndefined()
+    expect(parsePreset({ version: 1, tracks: [], key: { accidentals: 'sharps', mode: 'major', source: 'estimate' } }).key).toEqual({
+      accidentals: 'sharps',
+      mode: 'major',
+      source: 'estimate'
+    })
   })
 })

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { ChannelTracks } from '../model/song'
 
 /** How the practice track's notes are shown. */
 export type NoteDisplay = 'piano-roll' | 'sheet-music'
@@ -10,7 +11,22 @@ export interface Settings {
   zoom: number
   /** Scroll the staff to keep the playhead in view while playing. */
   followPlayhead: boolean
+  /** Whether a MIDI track with notes on several channels shows as one track or one per channel. */
+  channelTracks: ChannelTracks
 }
+
+export const CHANNEL_TRACK_OPTIONS: { value: ChannelTracks; label: string; hint: string }[] = [
+  {
+    value: 'combine',
+    label: 'Combine into one track',
+    hint: 'Notes on any channel of a MIDI track stay together. Drums stay separate.'
+  },
+  {
+    value: 'split',
+    label: 'Split into a track per channel',
+    hint: 'Each channel of a MIDI track gets its own strip.'
+  }
+]
 
 export const NOTE_DISPLAYS: { value: NoteDisplay; label: string; hint: string; available: boolean }[] = [
   {
@@ -29,7 +45,12 @@ export const NOTE_DISPLAYS: { value: NoteDisplay; label: string; hint: string; a
 
 export const MIN_ZOOM = 40
 export const MAX_ZOOM = 200
-export const DEFAULT_SETTINGS: Settings = { noteDisplay: 'piano-roll', zoom: 80, followPlayhead: true }
+export const DEFAULT_SETTINGS: Settings = {
+  noteDisplay: 'piano-roll',
+  zoom: 80,
+  followPlayhead: true,
+  channelTracks: 'combine'
+}
 
 const STORAGE_KEY = 'settings'
 
@@ -49,7 +70,8 @@ function load(): Settings {
           typeof s.zoom === 'number' && s.zoom >= MIN_ZOOM && s.zoom <= MAX_ZOOM
             ? s.zoom
             : DEFAULT_SETTINGS.zoom,
-        followPlayhead: typeof s.followPlayhead === 'boolean' ? s.followPlayhead : DEFAULT_SETTINGS.followPlayhead
+        followPlayhead: typeof s.followPlayhead === 'boolean' ? s.followPlayhead : DEFAULT_SETTINGS.followPlayhead,
+        channelTracks: s.channelTracks === 'split' ? 'split' : DEFAULT_SETTINGS.channelTracks
       }
     }
   } catch {

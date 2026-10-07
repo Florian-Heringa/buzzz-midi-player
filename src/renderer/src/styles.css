@@ -818,6 +818,12 @@ select {
   font-size: 0.85rem;
 }
 
+.key-picker__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .key-picker__note {
   max-width: 300px;
   margin: 0 0 4px;
@@ -933,6 +939,11 @@ select {
 
 .settings-dialog__option small {
   display: block;
+  color: var(--muted);
+}
+
+.settings-dialog__footnote {
+  margin-top: 2px;
   color: var(--muted);
 }
 

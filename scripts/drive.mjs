@@ -9,7 +9,8 @@
 // (80 BPM, 25 s long).
 // The app runs with a fresh, temporary user data folder, so your own settings are untouched.
 import { _electron as electron } from 'playwright-core'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { writeMidi } from 'midi-file'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 
@@ -505,6 +506,7 @@ try {
       ]),
     keyOptions.join(' | ')
   )
+  check('no estimate is offered when it matches the file key', (await page.locator('.key-picker__sources').count()) === 0)
   await page.screenshot({ path: resolve(SHOT_DIR, 'key-picker.png') })
   await page.locator('.key-picker__option', { hasText: 'Sharps · minor' }).click()
   await page.keyboard.press('Escape')
@@ -658,6 +660,66 @@ try {
     'cancelled export writes nothing',
     !existsSync(cancelledFile) && (await page.locator('.export-dialog').count()) === 0
   )
+
+
+  // A file whose track uses two channels (most notes on one, a stray note on another) and
+  // whose key signature says C major while its notes are in A major.
+  const quirkyFile = join(USER_DATA, 'quirky.mid')
+  {
+    const aMajor = [57, 59, 61, 62, 64, 66, 68, 69, 64, 61, 57]
+    const events = [
+      { deltaTime: 0, type: 'trackName', text: 'Lead', meta: true },
+      { deltaTime: 0, type: 'keySignature', key: 0, scale: 0, meta: true }
+    ]
+    for (const pitch of aMajor) {
+      events.push({ deltaTime: 0, type: 'noteOn', channel: 2, noteNumber: pitch, velocity: 90 })
+      events.push({ deltaTime: 480, type: 'noteOff', channel: 2, noteNumber: pitch, velocity: 0 })
+    }
+    events.push({ deltaTime: 0, type: 'noteOn', channel: 0, noteNumber: 69, velocity: 90 })
+    events.push({ deltaTime: 480, type: 'noteOff', channel: 0, noteNumber: 69, velocity: 0 })
+    events.push({ deltaTime: 0, type: 'endOfTrack', meta: true })
+    const conductor = [
+      { deltaTime: 0, type: 'setTempo', microsecondsPerBeat: 500000, meta: true },
+      { deltaTime: 0, type: 'endOfTrack', meta: true }
+    ]
+    writeFileSync(
+      quirkyFile,
+      Buffer.from(writeMidi({ header: { format: 1, numTracks: 2, ticksPerBeat: 480 }, tracks: [conductor, events] }))
+    )
+  }
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
+  }, quirkyFile)
+  await page.click('text=Open MIDI')
+  await page.waitForFunction(() => document.querySelector('.top-bar__file')?.textContent === 'quirky.mid')
+  check(
+    'a multi-channel track is combined into one by default',
+    JSON.stringify(await page.locator('.strip__name').allInnerTexts()) === JSON.stringify(['Lead'])
+  )
+  await page.click('.settings-button')
+  await page.check('input[name="channel-tracks"][value="split"]')
+  await page.click('.settings-dialog >> text=Done')
+  await page.waitForFunction(() => document.querySelectorAll('.strip').length === 2)
+  check(
+    'splitting gives a track per channel',
+    JSON.stringify(await page.locator('.strip__name').allInnerTexts()) === JSON.stringify(['Lead (ch 1)', 'Lead (ch 3)'])
+  )
+  await page.click('.settings-button')
+  await page.check('input[name="channel-tracks"][value="combine"]')
+  await page.click('.settings-dialog >> text=Done')
+  await page.waitForFunction(() => document.querySelectorAll('.strip').length === 1)
+
+  // The key: file says C major, notes say A major, so the estimate is offered.
+  const keyPicker = page.locator('.key-picker__button')
+  check('the file key is used first', (await keyPicker.innerText()).startsWith('C major'))
+  await keyPicker.click()
+  check('the estimated key is offered when it differs', (await page.locator('.key-picker__sources').count()) === 1)
+  await page.screenshot({ path: resolve(SHOT_DIR, 'key-estimate-option.png') })
+  await page.locator('.key-picker__option', { hasText: 'Estimated from the notes' }).click()
+  await page.keyboard.press('Escape')
+  check('choosing the estimate reads the song in A major', (await keyPicker.innerText()).startsWith('A major'))
+  const keySigGlyphs = await page.locator('.staff-view__header .staff__accidental').count()
+  check('the staff shows the estimated key signature', keySigGlyphs === 3, `${keySigGlyphs} accidentals`)
 
   const uiErrors = await page.locator('.error').allInnerTexts()
   check('no error banner', uiErrors.length === 0, uiErrors.join('; '))
