@@ -540,6 +540,36 @@ try {
   const rates = speedSamples.slice(1).map(([t, x], i) => (x - speedSamples[i][1]) / (t - speedSamples[i][0]))
   const steady = Math.max(...rates) / Math.min(...rates)
   check('sheet music moves at a constant speed', steady < 1.02, rates.map((r) => r.toFixed(4)).join(' '))
+  // Zooming while playing keeps the playhead where it is on screen, for the slider and the
+  // wheel (even with the mouse elsewhere) alike, also when the sheet is redrawn.
+  const playheadOnScreen = page.evaluate(
+    () =>
+      new Promise((done) => {
+        const xs = []
+        const scroller = document.querySelector('.sheet-view .staff-view__scroller')
+        const frame = () => {
+          const line = scroller.querySelector('.staff__playhead')
+          if (line) xs.push(line.getBoundingClientRect().left - scroller.getBoundingClientRect().left)
+          if (xs.length < 90) requestAnimationFrame(frame)
+          else done(xs)
+        }
+        requestAnimationFrame(frame)
+      })
+  )
+  await setRange('.zoom-control input', 200)
+  await page.waitForTimeout(300)
+  const sheetBox = await page.locator('.sheet-view .staff-view__scroller').boundingBox()
+  await page.mouse.move(sheetBox.x + sheetBox.width * 0.9, sheetBox.y + sheetBox.height / 2)
+  for (let i = 0; i < 6; i++) {
+    await page.mouse.wheel(0, 100)
+    await page.waitForTimeout(40)
+  }
+  const onScreen = await playheadOnScreen
+  // From when following has caught up (the sample is short, so the start can't scroll).
+  const following = onScreen.slice(onScreen.findIndex((x, i) => i > 0 && Math.abs(x - onScreen[i - 1]) < 1))
+  const zoomJump = Math.max(...following.slice(1).map((x, i) => Math.abs(x - following[i])))
+  check('zooming during playback keeps the playhead in place', following.length > 30 && zoomJump < 3, `biggest jump ${zoomJump.toFixed(1)}px over ${following.length} frames`)
+  await page.locator('.zoom-control__label').dblclick()
   await page.click('.transport__play') // pause
   await page.waitForTimeout(200)
   // Clicking bar 3 of the sheet moves the playhead there (bar 3 starts at tick 3840).

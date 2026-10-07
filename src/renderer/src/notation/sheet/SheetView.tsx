@@ -17,12 +17,10 @@ import {
 import type { Song, Track } from '../../model/song'
 import { trackDisplayName, useAppStore } from '../../store/appStore'
 import { DEFAULT_SETTINGS, useSettings } from '../../ui/settings'
-import { useWheelZoom } from '../useWheelZoom'
+import { FOLLOW_POSITION, isFollowing, useWheelZoom, type ZoomAnchor } from '../useWheelZoom'
 import type { Clef } from '../staffLayout'
 import { buildSheet, UNITS_PER_QUARTER, type Sheet, type SheetEvent } from './sheetModel'
 
-/** Fraction of the view width where the playhead sits while following playback. */
-const FOLLOW_POSITION = 0.3
 /** Vertical distance between the treble and bass staves of a grand staff. */
 const GRAND_STAFF_GAP = 120
 const STAVE_TOP = 50
@@ -58,6 +56,8 @@ type Anchor = [tick: number, x: number]
 
 interface Rendered {
   width: number
+  /** The zoom (relative to the default) it was drawn at. */
+  zoomFactor: number
   /** Start and end of every bar; time runs linearly between them. */
   anchors: Anchor[]
   notes: { start: number; end: number; el: SVGElement }[]
@@ -277,7 +277,7 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
   svg.style.width = `${width}px`
   svg.style.height = `${height}px`
 
-  return { width, anchors, notes, top: lineTop - 14, bottom: lineBottom + 14 }
+  return { width, zoomFactor, anchors, notes, top: lineTop - 14, bottom: lineBottom + 14 }
 }
 
 function makeNote(event: SheetEvent, clef: Clef, octaveShift: number): StaveNote {
@@ -329,9 +329,11 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
   const [rendered, setRendered] = useState<Rendered | null>(null)
   const [fontReady, setFontReady] = useState(false)
   const renderedRef = useRef<Rendered | null>(null)
-  const takeZoomAnchor = useWheelZoom(scroller, (px) => {
+  /** Horizontal stretch of the drawing while a zoom waits to be drawn (1 otherwise). */
+  const stretch = useRef(1)
+  const { takeAnchor: takeZoomAnchor, peekAnchor: peekZoomAnchor } = useWheelZoom(scroller, (px) => {
     const current = renderedRef.current
-    return current ? interpolate(current.anchors, px, 1) : null
+    return current ? interpolate(current.anchors, px / stretch.current, 1) : null
   })
 
   // VexFlow measures with the music font, so it has to be loaded first.
@@ -344,34 +346,53 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
   }, [])
 
   // Drawing a whole song takes a moment, so zoom changes (a burst while wheeling) are drawn
-  // once they settle; a new song, track or key is drawn straight away.
+  // once they settle, meanwhile stretching the current drawing to roughly the new width; a new
+  // song, track or key is drawn straight away.
   const drawnSheet = useRef<Sheet | null>(null)
   useEffect(() => {
     const el = drawing.current
     if (!el || !fontReady) return
-    const draw = (): void => {
-      el.replaceChildren()
-      const result = renderSheet(el, sheet, zoom / DEFAULT_SETTINGS.zoom)
-      drawnSheet.current = sheet
-      renderedRef.current = result
-      setRendered(result)
-      if (header.current) renderHeader(header.current, sheet, el.querySelector('svg')!)
+    const zoomFactor = zoom / DEFAULT_SETTINGS.zoom
 
-      // Keep the spot under the mouse (wheel zoom) or bring the playhead into view.
+    /**
+     * After a zoom: the playhead stays put while following playback, otherwise the spot under
+     * the mouse (wheel zoom) stays put or the playhead comes into view.
+     */
+    const keepInView = (result: Rendered, anchor: ZoomAnchor | null): void => {
       const view = scroller.current
       if (!view) return
-      const anchor = takeZoomAnchor()
-      const tick = anchor?.tick ?? useAppStore.getState().positionTick
-      const x = interpolate(result.anchors, tick, 0)
-      if (anchor) view.scrollLeft = x - anchor.offset
-      else if (tick > 0) view.scrollLeft = x - view.clientWidth * FOLLOW_POSITION
+      const xOf = (tick: number): number => interpolate(result.anchors, tick, 0) * stretch.current
+      const position = useAppStore.getState().positionTick
+      if (anchor && !isFollowing()) view.scrollLeft = xOf(anchor.tick) - anchor.offset
+      else if (position > 0) view.scrollLeft = xOf(position) - view.clientWidth * FOLLOW_POSITION
     }
-    if (drawnSheet.current === sheet) {
+
+    const draw = (): void => {
+      el.replaceChildren()
+      const result = renderSheet(el, sheet, zoomFactor)
+      drawnSheet.current = sheet
+      renderedRef.current = result
+      stretch.current = 1
+      setRendered(result)
+      if (header.current) renderHeader(header.current, sheet, el.querySelector('svg')!)
+      keepInView(result, takeZoomAnchor())
+    }
+
+    const current = renderedRef.current
+    const svg = el.querySelector('svg')
+    if (drawnSheet.current === sheet && current && svg) {
+      // Spacing scales with the zoom, so stretching is close to what will be drawn.
+      stretch.current = zoomFactor / current.zoomFactor
+      const width = current.width * stretch.current
+      svg.setAttribute('preserveAspectRatio', 'none')
+      svg.setAttribute('width', String(width))
+      svg.style.width = `${width}px`
+      keepInView(current, peekZoomAnchor())
       const timer = setTimeout(draw, 90)
       return () => clearTimeout(timer)
     }
     draw()
-  }, [sheet, zoom, fontReady, takeZoomAnchor])
+  }, [sheet, zoom, fontReady, takeZoomAnchor, peekZoomAnchor])
 
   // Back to the start when switching track or song.
   useEffect(() => {
@@ -390,6 +411,8 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
     let sounding = new Set<SVGElement>()
 
     const update = (tick: number, playing: boolean): void => {
+      // A redraw replaces this drawing before React gets to unsubscribe it.
+      if (renderedRef.current !== rendered) return
       const x = interpolate(rendered.anchors, tick, 0)
       line.setAttribute('x1', String(x))
       line.setAttribute('x2', String(x))
@@ -399,11 +422,11 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
       sounding = now
       const el = scroller.current
       if (playing && followPlayhead && el) {
-        el.scrollLeft = x - el.clientWidth * FOLLOW_POSITION
+        el.scrollLeft = x * stretch.current - el.clientWidth * FOLLOW_POSITION
       }
     }
     const state = useAppStore.getState()
-    update(state.positionTick, false)
+    update(state.positionTick, state.transport === 'playing')
     const unsubscribe = useAppStore.subscribe((s, prev) => {
       if (s.positionTick !== prev.positionTick || s.transport !== prev.transport) {
         update(s.positionTick, s.transport === 'playing')

@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import type { Song, Track } from '../model/song'
 import { trackDisplayName, useAppStore } from '../store/appStore'
 import { useSettings } from '../ui/settings'
-import { useWheelZoom } from './useWheelZoom'
+import { FOLLOW_POSITION, isFollowing, useWheelZoom } from './useWheelZoom'
 import { layoutStaff, type Accidental, type Clef, type StaffLayout } from './staffLayout'
 
 // U+FE0E requests the text (not emoji) presentation, which Windows otherwise draws in color.
@@ -11,8 +11,6 @@ const ACCIDENTAL_GLYPH: Record<Accidental, string> = {
   flat: '\u266D\uFE0E',
   natural: '\u266E\uFE0E'
 }
-/** Fraction of the view width where the playhead sits while following playback. */
-const FOLLOW_POSITION = 0.3
 
 export function StaffView({ song, track }: { song: Song; track: Track }): React.JSX.Element {
   const { zoom, followPlayhead } = useSettings()
@@ -31,14 +29,15 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
   }, [song.tracks, track])
 
   // Wheel zoom keeps the music under the mouse in place.
-  const takeZoomAnchor = useWheelZoom(scroller, (x) => (x - layout.originX) / layout.pxPerTick)
+  const { takeAnchor: takeZoomAnchor } = useWheelZoom(scroller, (x) => (x - layout.originX) / layout.pxPerTick)
 
   // After zooming: keep the spot under the mouse (wheel) or bring the playhead into view.
+  // While following playback the playhead stays put instead, so the view doesn't jump to it.
   useEffect(() => {
     const el = scroller.current
     if (!el) return
     const anchor = takeZoomAnchor()
-    if (anchor) {
+    if (anchor && !isFollowing()) {
       el.scrollLeft = layout.originX + anchor.tick * layout.pxPerTick - anchor.offset
       return
     }
