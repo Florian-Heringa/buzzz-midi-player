@@ -12,7 +12,7 @@ import {
   StaveTie,
   VexFlow,
   Voice,
-  type TickContext
+  TickContext
 } from 'vexflow/bravura'
 import type { Song, Track } from '../../model/song'
 import { trackDisplayName, useAppStore } from '../../store/appStore'
@@ -28,6 +28,21 @@ const STAVE_TOP = 50
 function drawingLeft(sheet: Sheet): number {
   // A grand staff's brace is drawn left of the staves.
   return sheet.clefs.length === 2 ? 26 : 10
+}
+
+/**
+ * How far right of the stave's note start (plus its beat's x) VexFlow draws a note: it adds the
+ * stave padding from its metrics, which aren't exported. Measured once, so layout and drawing agree.
+ */
+let notePaddingPx: number | undefined
+function notePadding(): number {
+  if (notePaddingPx === undefined) {
+    const stave = new Stave(0, 0, 100)
+    const note = new StaveNote({ keys: ['b/4'], duration: 'q' }).setStave(stave)
+    new TickContext().addTickable(note).preFormat().setX(0)
+    notePaddingPx = note.getAbsoluteX() - stave.getNoteStartX()
+  }
+  return notePaddingPx
 }
 
 const DURATIONS: Record<number, { duration: string; dots: number }> = {
@@ -203,7 +218,8 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
     previous = { fifths: measure.fifths, timeSig: bar.timeSig }
     const noteStart = Math.max(...staves.map((s) => s.getNoteStartX()))
     const width = noteStart - x + bar.units * scale
-    staves.forEach((stave) => stave.setWidth(width).setNoteStartX(noteStart))
+    // Notes are drawn at noteStart + their beat's x, as the spacing above assumes.
+    staves.forEach((stave) => stave.setWidth(width).setNoteStartX(noteStart - notePadding()))
 
     // Beats at their time position; a whole-bar rest centred in the bar.
     for (const { units, context: tickContext } of bar.contexts) {
