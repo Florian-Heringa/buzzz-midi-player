@@ -101,17 +101,23 @@ interface PreparedMeasure {
   contexts: { units: number; context: TickContext }[]
   units: number
   timeSig: string
+  /**
+   * Room each beat needs up to the next one (or, for the last, to the barline) so the
+   * symbols don't collide, in px.
+   */
+  rooms: number[]
 }
 
 /** VexFlow ticks per grid unit (a sixteenth). */
 const VEX_TICKS_PER_UNIT = VexFlow.RESOLUTION / (4 * UNITS_PER_QUARTER)
+/** Space for a sixteenth at 100% zoom (more if its symbols need it). */
+const SIXTEENTH_PX = 24
 /**
- * Share of bars whose spacing need sets the song-wide scale. The busiest few bars above it get
- * extra width of their own rather than stretching the whole song.
+ * How space grows with a note's length: length^exponent. 1 would be in proportion to time
+ * (constant playhead speed but long notes take a lot of room); 0.6 gives a quarter about 2.3×
+ * a sixteenth's room and a whole bar's rest about 5×, as engraved music roughly does.
  */
-const SCALE_PERCENTILE = 0.9
-/** Spacing per sixteenth at 100% zoom when the notes need no more (as in the piano roll). */
-const BASE_PX_PER_UNIT = 20
+const SPACING_EXPONENT = 0.6
 /** Space kept between neighbouring notes, and after the barline before the first note. */
 const NOTE_GAP = 6
 const MIN_LEAD = 12
@@ -119,12 +125,11 @@ const MIN_LEAD = 12
 /**
  * Draws the sheet into `container` (an empty div) and returns what playback needs.
  *
- * Notes are placed in proportion to time (x = start + ticks × scale), so the playhead and
- * following move at a constant speed. At 100% zoom the scale is the tightest that keeps the
- * notes clear (say sixteenths with accidentals) in nearly all bars; the busiest few bars are
- * widened individually so they don't stretch the whole song. Zoom changes only the spacing,
- * never the height: zooming in spreads the notes, zooming out brings them closer, but never
- * closer than they need to stay clear of each other (so busy bars stay as wide as they are).
+ * Each beat gets room for its length, growing less than in proportion (see SPACING_EXPONENT),
+ * so long notes and rests don't spread the music out; never less than its symbols need to stay
+ * clear. The playhead moves steadily from one beat to the next, so it slows down through long
+ * notes. Zoom changes only the spacing, never the height: zooming in spreads the notes,
+ * zooming out brings them closer, down to what keeps them clear of each other.
  */
 function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number): Rendered {
   const clefs = sheet.clefs.map(clefInfo)
@@ -151,35 +156,28 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
       context: tickContexts.map[tick]
     }))
     const units = (measure.endTick - measure.startTick) / sheet.unitTicks
-    return { staffNotes, voices, formatter, contexts, units, timeSig }
+    return { staffNotes, voices, formatter, contexts, units, timeSig, rooms: [] }
   })
 
-  // Room before a bar's first note (for its accidentals) and the scale that fits every bar.
+  // Room before a bar's first note (for its accidentals).
   const lead = Math.max(
     MIN_LEAD,
     ...prepared.map((bar) => (bar.contexts[0]?.context.getMetrics().modLeftPx ?? 0) + NOTE_GAP)
   )
-  // The scale each bar needs so its notes don't collide.
-  const barNeeds = prepared.map((bar) => {
-    let need = 0
-    bar.contexts.forEach(({ units, context }, i) => {
+  for (const bar of prepared) {
+    bar.rooms = bar.contexts.map(({ context }, i) => {
       const metrics = context.getMetrics()
       const rightOfNote = metrics.width - metrics.modLeftPx
       const next = bar.contexts[i + 1]
       // To the next note; the last note only has to clear the barline (the next bar's first
       // note sits `lead` past it).
-      const room = next
+      return next
         ? rightOfNote + next.context.getMetrics().modLeftPx + NOTE_GAP
         : rightOfNote + NOTE_GAP + lead
-      const span = (next ? next.units : bar.units) - units
-      if (span > 0) need = Math.max(need, room / span)
     })
-    return need
-  })
-  const sortedNeeds = [...barNeeds].sort((a, b) => a - b)
-  const typicalNeed = sortedNeeds[Math.floor((sortedNeeds.length - 1) * SCALE_PERCENTILE)] ?? 0
-  const songScale = Math.max(BASE_PX_PER_UNIT, typicalNeed) * zoomFactor
-  const barScales = barNeeds.map((need) => Math.max(songScale, need))
+  }
+  /** Room for a beat lasting `units` sixteenths, at this zoom, before collisions are checked. */
+  const spaceFor = (units: number): number => SIXTEENTH_PX * zoomFactor * units ** SPACING_EXPONENT
 
   // Pass 2: place everything by time and draw.
   const renderer = new Renderer(container, Renderer.Backends.SVG)
@@ -203,8 +201,15 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
   let previous = { fifths: NaN, timeSig: '' }
   sheet.measures.forEach((measure, m) => {
     const bar = prepared[m]
-    const scale = barScales[m]
     const first = m === 0
+    // Where each beat goes (px from the first beat), and the width up to the barline.
+    const offsets: number[] = []
+    let notesWidth = 0
+    bar.contexts.forEach(({ units }, i) => {
+      offsets.push(notesWidth)
+      const span = (bar.contexts[i + 1]?.units ?? bar.units) - units
+      notesWidth += Math.max(bar.rooms[i], spaceFor(span))
+    })
 
     // Staves with the modifiers this bar needs (clef only at the start).
     const staves = staffYs.map((y, staff) => {
@@ -217,19 +222,17 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
     })
     previous = { fifths: measure.fifths, timeSig: bar.timeSig }
     const noteStart = Math.max(...staves.map((s) => s.getNoteStartX()))
-    const width = noteStart - x + bar.units * scale
+    const width = noteStart - x + notesWidth
     // Notes are drawn at noteStart + their beat's x, as the spacing above assumes.
     staves.forEach((stave) => stave.setWidth(width).setNoteStartX(noteStart - notePadding()))
 
-    // Beats at their time position; a whole-bar rest centred in the bar.
-    for (const { units, context: tickContext } of bar.contexts) {
-      tickContext.setX(lead + units * scale)
-    }
+    // Beats at their places; a whole-bar rest centred in the bar.
+    bar.contexts.forEach(({ context: tickContext }, i) => tickContext.setX(lead + offsets[i]))
     measure.staves.forEach((events, staff) => {
       if (events.length === 1 && events[0].fullBar) {
         const rest = bar.staffNotes[staff][0]
         const tickContext = rest.getTickContext()
-        tickContext.setX((bar.units * scale) / 2 - tickContext.getMetrics().width / 2)
+        tickContext.setX(notesWidth / 2 - tickContext.getMetrics().width / 2)
       }
     })
     bar.voices.forEach((voice, staff) => voice.setStave(staves[staff]))
@@ -245,8 +248,12 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
     // stem lengths the first time it is laid out, which for the first beams was before that.
     beamBar(bar.staffNotes, bar.timeSig).forEach((beam) => beam.setContext(context).draw())
 
-    // Time runs linearly through the bar: from its start beat to the next bar's.
-    anchors.push([measure.startTick, noteStart + lead], [measure.endTick, noteStart + lead + bar.units * scale])
+    // Time runs linearly from each beat to the next (across the barline to the next bar's first
+    // beat); after the last bar, to where a next bar's first beat would be.
+    bar.contexts.forEach(({ units }, i) =>
+      anchors.push([measure.startTick + units * sheet.unitTicks, noteStart + lead + offsets[i]])
+    )
+    if (m === sheet.measures.length - 1) anchors.push([measure.endTick, noteStart + lead + notesWidth])
     measure.staves.forEach((events, staff) =>
       events.forEach((event, i) => {
         const note = bar.staffNotes[staff][i]

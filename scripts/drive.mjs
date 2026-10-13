@@ -544,7 +544,7 @@ try {
   const sheetLaterX = await sheetPlayheadX()
   check('the sheet playhead moves with playback', sheetLaterX > sheetStartX + 50, `${Math.round(sheetStartX)} → ${Math.round(sheetLaterX)}`)
   check('a sounding note is highlighted on the sheet', (await page.locator('.sheet-note--sounding').count()) > 0)
-  // Constant speed: the playhead's x moves the same distance per tick throughout.
+  // The playhead moves steadily forward (slower through long notes than short ones)…
   const speedSamples = []
   for (let i = 0; i < 6; i++) {
     // Read position and playhead together, so no frame passes between them.
@@ -557,8 +557,7 @@ try {
     await page.waitForTimeout(250)
   }
   const rates = speedSamples.slice(1).map(([t, x], i) => (x - speedSamples[i][1]) / (t - speedSamples[i][0]))
-  const steady = Math.max(...rates) / Math.min(...rates)
-  check('sheet music moves at a constant speed', steady < 1.02, rates.map((r) => r.toFixed(4)).join(' '))
+  check('the sheet playhead moves forward', rates.every((r) => r > 0), rates.map((r) => r.toFixed(4)).join(' '))
   // Zooming while playing keeps the playhead where it is on screen, for the slider and the
   // wheel (even with the mouse elsewhere) alike, also when the sheet is redrawn.
   const playheadOnScreen = page.evaluate(
@@ -568,7 +567,10 @@ try {
         const scroller = document.querySelector('.sheet-view .staff-view__scroller')
         const frame = () => {
           const line = scroller.querySelector('.staff__playhead')
-          if (line) xs.push(line.getBoundingClientRect().left - scroller.getBoundingClientRect().left)
+          // Only where the view can scroll both ways (the sample is short and compact).
+          const max = scroller.scrollWidth - scroller.clientWidth
+          const free = scroller.scrollLeft > 0.5 && scroller.scrollLeft < max - 0.5
+          if (line) xs.push(free ? line.getBoundingClientRect().left - scroller.getBoundingClientRect().left : null)
           if (xs.length < 90) requestAnimationFrame(frame)
           else done(xs)
         }
@@ -584,13 +586,27 @@ try {
     await page.waitForTimeout(40)
   }
   const onScreen = await playheadOnScreen
-  // From when following has caught up (the sample is short, so the start can't scroll).
-  const following = onScreen.slice(onScreen.findIndex((x, i) => i > 0 && Math.abs(x - onScreen[i - 1]) < 1))
-  const zoomJump = Math.max(...following.slice(1).map((x, i) => Math.abs(x - following[i])))
-  check('zooming during playback keeps the playhead in place', following.length > 30 && zoomJump < 3, `biggest jump ${zoomJump.toFixed(1)}px over ${following.length} frames`)
+  // Between consecutive frames where the view could scroll freely.
+  const steps = onScreen.slice(1).flatMap((x, i) => (x !== null && onScreen[i] !== null ? [Math.abs(x - onScreen[i])] : []))
+  const zoomJump = Math.max(...steps)
+  check('zooming during playback keeps the playhead in place', steps.length > 30 && zoomJump < 3, `biggest jump ${zoomJump.toFixed(1)}px over ${steps.length} frames`)
   await page.locator('.zoom-control__label').dblclick()
   await page.click('.transport__play') // pause
   await page.waitForTimeout(200)
+  // The playhead is at each note as it starts sounding.
+  const atNotes = []
+  for (const startTick of [0, 1920, 3840, 5760]) {
+    await setRange('.transport__position', startTick)
+    await page.waitForTimeout(150)
+    atNotes.push(
+      await page.evaluate(() => {
+        const line = document.querySelector('.sheet-view .staff__playhead').getBoundingClientRect()
+        const note = document.querySelector('.sheet-note--sounding')?.getBoundingClientRect()
+        return note ? Math.round(line.left - note.left) : null
+      })
+    )
+  }
+  check('the sheet playhead is at each note as it starts', atNotes.every((d) => d !== null && Math.abs(d) <= 3), `offsets ${atNotes.join(' ')} px`)
   // Clicking bar 3 of the sheet moves the playhead there (bar 3 starts at tick 3840).
   const bar3 = await page.evaluate(() => {
     const staves = [...document.querySelectorAll('.sheet-view__drawing .vf-stave')]
