@@ -17,7 +17,7 @@ import {
 import type { Song, Track } from '../../model/song'
 import { trackDisplayName, useAppStore } from '../../store/appStore'
 import { DEFAULT_SETTINGS, useSettings } from '../../ui/settings'
-import { FOLLOW_POSITION, isFollowing, useWheelZoom, type ZoomAnchor } from '../useWheelZoom'
+import { FOLLOW_POSITION, isFollowing, useRevealJumps, useWheelZoom, type ZoomAnchor } from '../useWheelZoom'
 import type { Clef } from '../staffLayout'
 import { buildSheet, UNITS_PER_QUARTER, type Sheet, type SheetEvent } from './sheetModel'
 
@@ -123,8 +123,8 @@ const MIN_LEAD = 12
  * following move at a constant speed. At 100% zoom the scale is the tightest that keeps the
  * notes clear (say sixteenths with accidentals) in nearly all bars; the busiest few bars are
  * widened individually so they don't stretch the whole song. Zoom changes only the spacing,
- * never the height: zooming in spreads the notes, zooming out brings them closer (the busiest
- * bars too, so far out their notes can touch).
+ * never the height: zooming in spreads the notes, zooming out brings them closer, but never
+ * closer than they need to stay clear of each other (so busy bars stay as wide as they are).
  */
 function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number): Rendered {
   const clefs = sheet.clefs.map(clefInfo)
@@ -170,7 +170,7 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
       // note sits `lead` past it).
       const room = next
         ? rightOfNote + next.context.getMetrics().modLeftPx + NOTE_GAP
-        : rightOfNote + lead + 2
+        : rightOfNote + NOTE_GAP + lead
       const span = (next ? next.units : bar.units) - units
       if (span > 0) need = Math.max(need, room / span)
     })
@@ -179,7 +179,7 @@ function renderSheet(container: HTMLDivElement, sheet: Sheet, zoomFactor: number
   const sortedNeeds = [...barNeeds].sort((a, b) => a - b)
   const typicalNeed = sortedNeeds[Math.floor((sortedNeeds.length - 1) * SCALE_PERCENTILE)] ?? 0
   const songScale = Math.max(BASE_PX_PER_UNIT, typicalNeed) * zoomFactor
-  const barScales = barNeeds.map((need) => Math.max(songScale, need * Math.min(1, zoomFactor)))
+  const barScales = barNeeds.map((need) => Math.max(songScale, need))
 
   // Pass 2: place everything by time and draw.
   const renderer = new Renderer(container, Renderer.Backends.SVG)
@@ -350,6 +350,11 @@ export function SheetView({ song, track }: { song: Song; track: Track }): React.
   const { takeAnchor: takeZoomAnchor, peekAnchor: peekZoomAnchor } = useWheelZoom(scroller, (px) => {
     const current = renderedRef.current
     return current ? interpolate(current.anchors, px / stretch.current, 1) : null
+  })
+
+  useRevealJumps(scroller, (tick) => {
+    const current = renderedRef.current
+    return current ? interpolate(current.anchors, tick, 0) * stretch.current : null
   })
 
   // VexFlow measures with the music font, so it has to be loaded first.
