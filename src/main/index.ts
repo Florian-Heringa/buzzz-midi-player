@@ -1,11 +1,12 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, shell } from 'electron'
 import { createHash } from 'crypto'
 import { cpSync, existsSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
-import { IpcChannels, type LoadedMidiFile, type MenuCommand } from '../shared/api'
+import { IpcChannels, type LoadedMidiFile, type MenuCommand, type UpdateStatus } from '../shared/api'
 import { registerExportHandlers } from './export/exportHandler'
 import { describeRecent, RecentFilesStore } from './recentFiles'
+import { checkForUpdate, LATEST_RELEASE_API, RELEASES_PAGE } from './updates'
 
 const MIDI_FILTERS = [{ name: 'MIDI files', extensions: ['mid', 'midi'] }]
 const PRESET_FILTERS = [{ name: 'Player presets', extensions: ['json'] }]
@@ -151,6 +152,49 @@ function soundFontPath(): string {
 
 const iconPath = (): string => resourcePath('icons', 'icon.png')
 
+/** The newer release found by the last successful update check, shown in the window until updated. */
+let availableUpdate: (UpdateStatus & { status: 'available' }) | null = null
+
+/**
+ * Checks GitHub for a newer release and tells the window. A failed check keeps what an earlier
+ * one found. BUZZZ_RELEASES_API points the check elsewhere (the smoke test serves its own).
+ */
+async function checkForUpdates(): Promise<UpdateStatus> {
+  const result = await checkForUpdate(
+    app.getVersion(),
+    (url) =>
+      net.fetch(url, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': `${app.name}/${app.getVersion()}` }
+      }),
+    process.env['BUZZZ_RELEASES_API'] || LATEST_RELEASE_API
+  )
+  if (result.status !== 'failed') {
+    availableUpdate = result.status === 'available' ? result : null
+    mainWindow?.webContents.send(IpcChannels.availableUpdate, availableUpdate)
+  }
+  return result
+}
+
+/** Help > Check for Updates…: checks now and says what it found. */
+async function checkForUpdatesFromMenu(): Promise<void> {
+  const result = await checkForUpdates()
+  const options: Electron.MessageBoxOptions =
+    result.status === 'available'
+      ? {
+          type: 'info',
+          message: `${app.name} ${result.version} is available.`,
+          detail: `You have version ${app.getVersion()}. Download the new version from GitHub.`,
+          buttons: ['Download', 'Later'],
+          defaultId: 0,
+          cancelId: 1
+        }
+      : result.status === 'current'
+        ? { type: 'info', message: `${app.name} is up to date.`, detail: `Version ${app.getVersion()} is the latest.` }
+        : { type: 'warning', message: 'Could not check for updates.', detail: result.message }
+  const { response } = mainWindow ? await dialog.showMessageBox(mainWindow, options) : await dialog.showMessageBox(options)
+  if (result.status === 'available' && response === 0) await shell.openExternal(result.url)
+}
+
 /** Opens the third-party notices; online if the system has no app for Markdown files. */
 async function showThirdPartyNotices(): Promise<void> {
   const file = app.isPackaged
@@ -178,6 +222,7 @@ function buildMenu(): void {
             label: app.name,
             submenu: [
               { role: 'about' },
+              { label: 'Check for Updates…', click: () => void checkForUpdatesFromMenu() },
               { type: 'separator' },
               settings,
               { type: 'separator' },
@@ -257,6 +302,7 @@ function buildMenu(): void {
           ? []
           : ([
               { label: `About ${app.name}`, click: () => app.showAboutPanel() },
+              { label: 'Check for Updates…', click: () => void checkForUpdatesFromMenu() },
               { type: 'separator' }
             ] satisfies Electron.MenuItemConstructorOptions[])),
         { label: 'Project Website', click: () => void shell.openExternal(HOMEPAGE) },
@@ -349,6 +395,13 @@ function registerIpc(): void {
 
   ipcMain.handle(IpcChannels.setNativeTheme, (_event, mode: string) => {
     if (mode === 'system' || mode === 'light' || mode === 'dark') nativeTheme.themeSource = mode
+  })
+
+  ipcMain.handle(IpcChannels.getAvailableUpdate, () => availableUpdate)
+  ipcMain.handle(IpcChannels.openReleasePage, async (_event, url: string) => {
+    // Only this app's release pages.
+    if (typeof url !== 'string' || !url.startsWith(`${RELEASES_PAGE}/`)) throw new Error('Not a release page')
+    await shell.openExternal(url)
   })
 
   ipcMain.handle(IpcChannels.loadSoundFont, async () => {
@@ -448,6 +501,8 @@ if (!app.requestSingleInstanceLock()) {
     buildMenu()
     registerIpc()
     createWindow()
+    // Quietly at startup: offline or unreachable just means no notice.
+    void checkForUpdates()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

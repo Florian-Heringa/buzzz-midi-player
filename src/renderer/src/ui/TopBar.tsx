@@ -22,6 +22,7 @@ import {
   useAppStore
 } from '../store/appStore'
 import { formatTime } from './format'
+import { UpdateNotice } from './UpdateNotice'
 
 /** Top pane: file actions, song details, transport, tempo and loop controls. */
 export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
@@ -43,6 +44,7 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
           <SongSummary />
           <div className="top-bar__end">
             <LastExport />
+            <UpdateNotice compact />
             <button
               className="settings-button"
               onClick={openSettings}

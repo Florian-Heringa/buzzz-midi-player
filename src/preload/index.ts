@@ -23,7 +23,10 @@ const api: ElectronApi = {
   onExportProgress: (listener) => subscribe(IpcChannels.exportProgress, listener),
   setNativeTheme: (mode) => ipcRenderer.invoke(IpcChannels.setNativeTheme, mode),
   getPathForFile: (file) => webUtils.getPathForFile(file),
-  onMenuCommand: (listener) => subscribe<MenuCommand>(IpcChannels.menuCommand, listener)
+  onMenuCommand: (listener) => subscribe<MenuCommand>(IpcChannels.menuCommand, listener),
+  getAvailableUpdate: () => ipcRenderer.invoke(IpcChannels.getAvailableUpdate),
+  onAvailableUpdate: (listener) => subscribe(IpcChannels.availableUpdate, listener),
+  openReleasePage: (url) => ipcRenderer.invoke(IpcChannels.openReleasePage, url)
 }
 
 /** Forwards messages on a channel to a listener; returns an unsubscribe function. */

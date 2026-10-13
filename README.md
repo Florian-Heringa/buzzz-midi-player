@@ -24,6 +24,9 @@ up, mute it to sing along, or loop the bars you're working on.
   loads them as preset files.
 - **Recent files** on the start screen and in File > Open Recent.
 - **Themes:** Modern, Classic, Old School and Retro, each in light and dark.
+- **Update notice:** at startup (and from Help > Check for Updates…) the app asks GitHub for
+  the latest release and shows a notice in the top right when a newer version is out. Nothing
+  else is sent or collected; offline, it simply shows nothing.
 
 ## Installing
 

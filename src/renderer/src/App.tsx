@@ -12,6 +12,7 @@ import { StartScreen } from './ui/StartScreen'
 import { trackHueStyle } from './ui/theme'
 import { Toasts } from './ui/Toasts'
 import { TopBar } from './ui/TopBar'
+import { UpdateNotice } from './ui/UpdateNotice'
 import { useMidiLoader } from './ui/useMidiLoader'
 
 export default function App(): React.JSX.Element {
@@ -71,6 +72,9 @@ export default function App(): React.JSX.Element {
       ) : (
         // No file yet: one pane with opening a file, recent files and settings.
         <main className="start-page">
+          <div className="start-page__update">
+            <UpdateNotice />
+          </div>
           <StartScreen onOpen={() => void openDialog()} onOpenRecent={(path) => void openRecent(path)} />
           <button className="settings-button start-page__settings" onClick={openSettings} aria-haspopup="dialog">
             <span aria-hidden>⚙</span> Settings

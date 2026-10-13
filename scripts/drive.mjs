@@ -10,6 +10,7 @@
 // The app runs with a fresh, temporary user data folder, so your own settings are untouched.
 import { _electron as electron } from 'playwright-core'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { createServer } from 'http'
 import { writeMidi } from 'midi-file'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
@@ -19,6 +20,16 @@ const MIDI = resolve(APP_DIR, process.argv[2] ?? 'samples/satb-chorale.mid')
 const SHOT_DIR = resolve(process.env.SCREENSHOT_DIR ?? resolve(APP_DIR, 'out/shots'))
 mkdirSync(SHOT_DIR, { recursive: true })
 const USER_DATA = mkdtempSync(join(tmpdir(), 'midi-player-smoke-'))
+
+// Stands in for GitHub's "latest release" API, so update checks run offline and predictably.
+const RELEASES = 'https://github.com/Florian-Heringa/buzzz-midi-player/releases'
+let latestRelease = { tag_name: 'v9.9.9', html_url: `${RELEASES}/tag/v9.9.9` }
+const releasesServer = createServer((_request, response) => {
+  response.setHeader('Content-Type', 'application/json')
+  response.end(JSON.stringify(latestRelease))
+})
+await new Promise((done) => releasesServer.listen(0, '127.0.0.1', done))
+const RELEASES_API = `http://127.0.0.1:${releasesServer.address().port}/releases/latest`
 
 /** Runs in the page before the app: taps everything connected to the speakers. */
 function installOutputTap() {
@@ -49,7 +60,7 @@ const packaged = process.env.APP_EXECUTABLE ? resolve(APP_DIR, process.env.APP_E
 const app = await electron.launch({
   executablePath: packaged ?? resolve(APP_DIR, 'node_modules/electron/dist/electron.exe'),
   args: [...(packaged ? [] : [APP_DIR]), `--user-data-dir=${USER_DATA}`],
-  env: { ...process.env },
+  env: { ...process.env, BUZZZ_RELEASES_API: RELEASES_API },
   timeout: 30_000
 })
 const errors = []
@@ -114,6 +125,61 @@ try {
     await page.evaluate(() => window.open('https://example.com') === null)
   )
 
+  // Updates: the startup check finds the newer release and shows it in the top right.
+  const notice = page.locator('.update-notice')
+  await notice.waitFor({ timeout: 15_000 })
+  const noticeBox = await notice.boundingBox()
+  const viewport = page.viewportSize() ?? (await page.evaluate(() => ({ width: window.innerWidth })))
+  check(
+    'a newer release shows an update notice in the top right at startup',
+    (await notice.innerText()).includes('9.9.9') && noticeBox.y < 40 && viewport.width - (noticeBox.x + noticeBox.width) < 40,
+    await notice.innerText()
+  )
+  await app.evaluate(({ shell }) => {
+    globalThis.__opened = []
+    shell.openExternal = async (url) => {
+      globalThis.__opened.push(url)
+    }
+  })
+  await notice.click()
+  await page.waitForTimeout(200)
+  const opened = await app.evaluate(() => globalThis.__opened)
+  check('the notice opens the release page', opened[0] === `${RELEASES}/tag/v9.9.9`, opened.join(', '))
+
+  // Help > Check for Updates…: says what it found, and the notice follows.
+  const checkFromMenu = async () => {
+    await app.evaluate(({ dialog, Menu }) => {
+      globalThis.__dialogs = []
+      dialog.showMessageBox = async (...args) => {
+        globalThis.__dialogs.push(args.find((a) => a && a.message).message)
+        return { response: 1 } // "Later"
+      }
+      Menu.getApplicationMenu()
+        .items.flatMap((menu) => menu.submenu?.items ?? [])
+        .find((item) => item.label === 'Check for Updates…')
+        .click()
+    })
+    await page.waitForFunction(() => true)
+    for (let i = 0; i < 50; i++) {
+      const shown = await app.evaluate(() => globalThis.__dialogs)
+      if (shown.length) return shown[0]
+      await page.waitForTimeout(100)
+    }
+    return null
+  }
+  latestRelease = { tag_name: 'v0.0.1', html_url: `${RELEASES}/tag/v0.0.1` }
+  const upToDate = await checkFromMenu()
+  await page.waitForTimeout(200)
+  check(
+    'checking from the menu reports being up to date, and the notice goes',
+    upToDate?.includes('up to date') && (await notice.count()) === 0,
+    upToDate ?? 'no dialog'
+  )
+  latestRelease = { tag_name: 'v9.9.9', html_url: `${RELEASES}/tag/v9.9.9` }
+  const found = await checkFromMenu()
+  await notice.waitFor({ timeout: 5_000 })
+  check('checking from the menu reports a newer release, and the notice returns', found?.includes('9.9.9 is available'), found ?? 'no dialog')
+
   // Make the open dialog return the MIDI file without user interaction.
   await app.evaluate(({ dialog }, path) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] })
@@ -125,6 +191,7 @@ try {
     'opening a file switches to the full layout',
     (await page.locator('.split-panes__pane').count()) === 3 && (await page.locator('.start-page').count()) === 0
   )
+  check('the update notice stays in the top bar with a file open', (await page.locator('.top-bar .update-notice').count()) === 1)
   await page.waitForFunction(() => !document.querySelector('.transport__status'), null, {
     timeout: 30_000
   })
@@ -1252,6 +1319,7 @@ try {
 } finally {
   check('no console errors', errors.length === 0, errors.join('\n  '))
   await app.close()
+  releasesServer.close()
   rmSync(USER_DATA, { recursive: true, force: true })
 }
 process.exit(results.every(Boolean) ? 0 : 1)

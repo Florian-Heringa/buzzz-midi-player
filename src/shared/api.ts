@@ -37,6 +37,12 @@ export interface RecentFile {
   exists: boolean
 }
 
+/** Result of checking GitHub for a newer release. */
+export type UpdateStatus =
+  | { status: 'available'; version: string; url: string }
+  | { status: 'current'; version: string }
+  | { status: 'failed'; message: string }
+
 /** Commands sent from the application menu to the renderer. */
 export type MenuCommand =
   | 'open-midi'
@@ -94,6 +100,12 @@ export interface ElectronApi {
   getPathForFile(file: File): string
   /** Subscribes to application menu commands. Returns an unsubscribe function. */
   onMenuCommand(listener: (command: MenuCommand) => void): () => void
+  /** The newer release found by the last update check, or null (none, or not checked yet). */
+  getAvailableUpdate(): Promise<UpdateStatus | null>
+  /** Subscribes to update checks finding a newer release (or no longer). */
+  onAvailableUpdate(listener: (update: UpdateStatus | null) => void): () => void
+  /** Opens a release page of this app on GitHub in the browser. */
+  openReleasePage(url: string): Promise<void>
 }
 
 export const IpcChannels = {
@@ -116,5 +128,8 @@ export const IpcChannels = {
   exportProgress: 'export:progress',
   showExportInFolder: 'export:show-in-folder',
   setNativeTheme: 'theme:set-native',
-  menuCommand: 'menu:command'
+  menuCommand: 'menu:command',
+  getAvailableUpdate: 'update:get',
+  availableUpdate: 'update:available',
+  openReleasePage: 'update:open-page'
 } as const

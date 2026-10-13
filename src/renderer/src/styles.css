@@ -326,11 +326,23 @@ select {
 /* ---- Start page (no file open): one pane, settings at the bottom ---- */
 
 .start-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 32px 16px 20px;
   overflow: auto;
+}
+
+/* The update notice in the top right corner, as in the top bar once a file is open. */
+.start-page__update {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+}
+
+.update-notice {
+  white-space: nowrap;
 }
 
 .start-page__settings {
