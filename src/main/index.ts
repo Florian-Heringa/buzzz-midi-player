@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron'
 import { createHash } from 'crypto'
+import { cpSync, existsSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { basename, join } from 'path'
 import { IpcChannels, type LoadedMidiFile, type MenuCommand } from '../shared/api'
@@ -21,6 +22,37 @@ let recent: RecentFilesStore | null = null
 let launchPath = midiPathFromArgs(process.argv)
 /** Whether the window's page has asked for the launch file, i.e. is listening for files. */
 let rendererListening = false
+
+/** User data folder names from before the app was called Buzzz Midi Player (dev, packaged). */
+const OLD_USER_DATA_NAMES = ['electron-midi-player', 'Electron MIDI Player']
+/** Files that belong to a running instance; never copied. */
+const INSTANCE_FILES = /^(Singleton(Lock|Cookie|Socket)|lockfile)$/
+
+/**
+ * Brings settings, presets and recent files over from the old app name, the first time the
+ * renamed app runs. Must run before anything (like the single-instance lock) writes there.
+ */
+function migrateUserData(): void {
+  const current = app.getPath('userData')
+  // Only the default folder: a folder chosen with --user-data-dir (tests) stays as it is.
+  if (current !== join(app.getPath('appData'), app.getName())) return
+  const hasData = ['Local Storage', 'presets', 'recent-files.json'].some((name) => existsSync(join(current, name)))
+  if (hasData) return
+  for (const name of OLD_USER_DATA_NAMES) {
+    const old = join(app.getPath('appData'), name)
+    if (!existsSync(old)) continue
+    try {
+      cpSync(old, current, {
+        recursive: true,
+        force: false,
+        filter: (source) => !INSTANCE_FILES.test(basename(source))
+      })
+    } catch (err) {
+      console.warn('Could not copy settings from', old, err)
+    }
+    return
+  }
+}
 
 /** Reads a MIDI file and remembers it as recently opened (every way of opening goes here). */
 async function loadMidiFile(path: string): Promise<LoadedMidiFile> {
@@ -290,7 +322,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 800,
     minHeight: 500,
-    title: 'Electron MIDI Player',
+    title: 'Buzzz Midi Player',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -336,6 +368,8 @@ app.on('open-file', (event, path) => {
   event.preventDefault()
   void openFromSystem(path)
 })
+
+migrateUserData()
 
 // One window: opening another MIDI file from Explorer loads it into the running app.
 if (!app.requestSingleInstanceLock()) {

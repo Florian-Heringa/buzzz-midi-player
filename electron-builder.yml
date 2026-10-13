@@ -1,5 +1,5 @@
-appId: com.electron-midi-player.app
-productName: Electron MIDI Player
+appId: com.buzzz.midi-player
+productName: Buzzz Midi Player
 directories:
   output: dist
   buildResources: build
@@ -16,7 +16,7 @@ extraResources:
 # One square PNG (1024px) for every platform; electron-builder makes the .ico and .icns.
 icon: _resources/MidiPlayerLogo.png
 # No spaces: release downloads keep their names.
-artifactName: electron-midi-player-${version}-${os}-${arch}.${ext}
+artifactName: buzzz-midi-player-${version}-${os}-${arch}.${ext}
 fileAssociations:
   - ext: [mid, midi]
     name: MIDI file
@@ -30,7 +30,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  artifactName: electron-midi-player-${version}-setup.${ext}
+  artifactName: buzzz-midi-player-${version}-setup.${ext}
 
 mac:
   category: public.app-category.music
@@ -43,7 +43,7 @@ mac:
   identity: '-'
   notarize: false
 dmg:
-  artifactName: electron-midi-player-${version}-mac-${arch}.${ext}
+  artifactName: buzzz-midi-player-${version}-mac-${arch}.${ext}
 
 linux:
   category: Audio

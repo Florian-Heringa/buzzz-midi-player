@@ -1,4 +1,4 @@
-# Electron Midi Player
+# Buzzz Midi Player
 
 An electron based MIDI player for practicing vocal parts. The player displays one track at a time and plays it back in the chosen tempo. 
 
@@ -23,17 +23,17 @@ Download the installer for your system from the
 
 | System | File |
 |---|---|
-| Windows | `electron-midi-player-<version>-setup.exe` |
-| macOS (Apple Silicon) | `electron-midi-player-<version>-mac-arm64.dmg` |
-| macOS (Intel) | `electron-midi-player-<version>-mac-x64.dmg` |
+| Windows | `buzzz-midi-player-<version>-setup.exe` |
+| macOS (Apple Silicon) | `buzzz-midi-player-<version>-mac-arm64.dmg` |
+| macOS (Intel) | `buzzz-midi-player-<version>-mac-x64.dmg` |
 | Linux | `…-linux-x86_64.AppImage` (any distribution) or `…-linux-amd64.deb` (Debian, Ubuntu) |
 
 The installers are not signed yet, so the system asks before running the app the first time:
 
 - **Windows:** SmartScreen says "Windows protected your PC". Click **More info**, then **Run anyway**.
 - **macOS:** the app is blocked on first open. Open **System Settings > Privacy & Security**,
-  scroll down and click **Open Anyway** next to Electron MIDI Player. If macOS says the app
-  is damaged, run `xattr -cr "/Applications/Electron MIDI Player.app"` in Terminal and open
+  scroll down and click **Open Anyway** next to Buzzz Midi Player. If macOS says the app
+  is damaged, run `xattr -cr "/Applications/Buzzz Midi Player.app"` in Terminal and open
   it again.
 - **Linux:** make the AppImage executable (`chmod +x`, or Properties > Permissions), then run it.
 

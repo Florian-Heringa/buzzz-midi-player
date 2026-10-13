@@ -1,7 +1,8 @@
 {
-  "name": "electron-midi-player",
+  "name": "buzzz-midi-player",
+  "productName": "Buzzz Midi Player",
   "version": "0.1.0",
-  "description": "Electron MIDI player for practicing vocal parts",
+  "description": "MIDI player for practicing vocal parts",
   "main": "./out/main/index.js",
   "author": "Florian Heringa",
   "homepage": "https://github.com/Florian-Heringa/electron-midi-player",
