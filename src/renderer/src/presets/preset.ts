@@ -1,5 +1,7 @@
 import { DEFAULT_VOLUME, type TrackMix } from '../audio/mixer'
 import type { KeyChoice } from '../model/keys'
+import { updateLoop, type LoopRange } from '../model/loop'
+import { measureCount } from '../model/measures'
 import type { Song } from '../model/song'
 
 export type ExportMode = 'mix' | 'practice-solo' | 'practice-muted'
@@ -12,10 +14,13 @@ export interface ExportSettings {
   /** What the export contains: the current mix, only the practice part, or everything but it. */
   mode: ExportMode
   range: ExportRange
+  /** How many times the loop plays in a loop export. */
+  repeats: number
 }
 
 export const EXPORT_BITRATES = [96, 128, 160, 192, 256, 320] as const
-export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { bitrate: 192, mode: 'mix', range: 'song' }
+export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { bitrate: 192, mode: 'mix', range: 'song', repeats: 1 }
+export const MAX_EXPORT_REPEATS = 20
 /** Range for a base tempo set by the user (for files with wrong tempo information). */
 export const MIN_BASE_BPM = 20
 export const MAX_BASE_BPM = 400
@@ -46,6 +51,8 @@ export interface Preset {
   key?: KeyChoice
   /** The song's starting tempo in BPM, if the user corrected the file's. */
   baseBpm?: number
+  /** Loop range and whether looping is on. */
+  loop?: LoopRange
 }
 
 export interface PlayerSettings {
@@ -59,6 +66,7 @@ export interface PlayerSettings {
   keyChoice: KeyChoice | null
   /** The song's starting tempo in BPM; null follows the file's tempo. */
   baseBpm: number | null
+  loop: LoopRange
 }
 
 export function createPreset(
@@ -81,7 +89,8 @@ export function createPreset(
     })),
     export: { ...settings.exportSettings },
     ...(settings.keyChoice ? { key: { ...settings.keyChoice } } : {}),
-    ...(settings.baseBpm !== null ? { baseBpm: settings.baseBpm } : {})
+    ...(settings.baseBpm !== null ? { baseBpm: settings.baseBpm } : {}),
+    loop: { ...settings.loop }
   }
 }
 
@@ -142,8 +151,15 @@ export function applyPreset(song: Song, preset: Preset, defaults: TrackMix[]): P
     exportSettings: preset.export,
     trackLabels: song.tracks.map((track) => matched[track.id]?.label ?? ''),
     keyChoice: preset.key ?? null,
-    baseBpm: preset.baseBpm ?? null
+    baseBpm: preset.baseBpm ?? null,
+    // Kept within the song's bars, in case the file changed.
+    loop: updateLoop(defaultLoop(song), preset.loop ?? {}, measureCount(song))
   }
+}
+
+/** Looping off, over the whole song. */
+export function defaultLoop(song: Song): LoopRange {
+  return { enabled: false, startBar: 1, endBar: measureCount(song) }
 }
 
 /** Validates untrusted JSON (a preset file) and returns a well-formed preset. */
@@ -192,8 +208,18 @@ export function parsePreset(json: unknown): Preset {
         ? bitrate
         : DEFAULT_EXPORT_SETTINGS.bitrate,
       mode: mode === 'mix' || mode === 'practice-solo' || mode === 'practice-muted' ? mode : 'mix',
-      range: exportJson.range === 'loop' ? 'loop' : 'song'
+      range: exportJson.range === 'loop' ? 'loop' : 'song',
+      repeats: integer(exportJson.repeats, 1, MAX_EXPORT_REPEATS, 1)
     },
+    ...(isObject(json.loop)
+      ? {
+          loop: {
+            enabled: json.loop.enabled === true,
+            startBar: integer(json.loop.startBar, 1, 100_000, 1),
+            endBar: integer(json.loop.endBar, 1, 100_000, 1)
+          }
+        }
+      : {}),
     ...(typeof json.baseBpm === 'number' && Number.isFinite(json.baseBpm)
       ? { baseBpm: number(json.baseBpm, MIN_BASE_BPM, MAX_BASE_BPM, 120) }
       : {}),

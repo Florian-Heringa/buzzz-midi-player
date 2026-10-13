@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { EXPORT_BITRATES, type ExportMode } from '../presets/preset'
+import { EXPORT_BITRATES, MAX_EXPORT_REPEATS, type ExportMode } from '../presets/preset'
 import { playbackRate, trackDisplayName, useAppStore } from '../store/appStore'
 
 const MODES: { value: ExportMode; label: string; hint: (part: string) => string }[] = [
@@ -87,8 +87,23 @@ export function ExportDialog(): React.JSX.Element | null {
           />
           <span>
             Loop: {loop.startBar === loop.endBar ? `bar ${loop.startBar}` : `bars ${loop.startBar}–${loop.endBar}`}
-            <small>Whether or not looping is switched on. Played once, with the sound fading out after.</small>
+            <small>Whether or not looping is switched on. The sound fades out after the last time.</small>
           </span>
+        </label>
+        <label className="export-dialog__repeats">
+          Play the loop
+          <select
+            value={settings.repeats}
+            disabled={settings.range !== 'loop'}
+            onChange={(e) => setExportSettings({ repeats: Number(e.target.value) })}
+            aria-label="Times to play the loop"
+          >
+            {Array.from({ length: MAX_EXPORT_REPEATS }, (_, i) => i + 1).map((times) => (
+              <option key={times} value={times}>
+                {times === 1 ? 'once' : `${times} times`}
+              </option>
+            ))}
+          </select>
         </label>
       </fieldset>
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { LoadedMidiFile } from '@shared/api'
 import { AudioEngine } from '../audio/engine'
-import { buildExportMidi } from '../audio/exportMix'
+import { buildExportMidi, songWithin } from '../audio/exportMix'
 import { channelStates, defaultMix, resetMixes, type MixReset, type TrackMix } from '../audio/mixer'
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
@@ -14,6 +14,7 @@ import {
   applyPreset,
   createPreset,
   DEFAULT_EXPORT_SETTINGS,
+  defaultLoop,
   MAX_BASE_BPM,
   MAX_TRACK_LABEL_LENGTH,
   MIN_BASE_BPM,
@@ -47,6 +48,8 @@ interface AppState {
   engineStatus: EngineStatus
   transport: TransportStatus
   positionTick: number
+  /** Counts jumps of the play position (seek, stop, loop), so the note views can show it. */
+  jumpCount: number
   /** Playback speed relative to the song's tempo (1 = original). */
   tempoFactor: number
   /** The song's starting tempo in BPM, when the file's is wrong; null follows the file. */
@@ -148,7 +151,8 @@ export const useAppStore = create<AppState>((set, get) => {
       exportSettings: settings.exportSettings,
       trackLabels: settings.trackLabels,
       keyChoice: settings.keyChoice,
-      baseBpm: settings.baseBpm
+      baseBpm: settings.baseBpm,
+      loop: settings.loop
     })
     engine?.setTempoFactor(playbackRate(get()))
     void engine?.setChannels(currentChannelStates())
@@ -161,7 +165,8 @@ export const useAppStore = create<AppState>((set, get) => {
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     trackLabels: song.tracks.map(() => ''),
     keyChoice: null,
-    baseBpm: null
+    baseBpm: null,
+    loop: defaultLoop(song)
   })
 
   /**
@@ -201,6 +206,7 @@ export const useAppStore = create<AppState>((set, get) => {
     engineStatus: 'idle',
     transport: 'stopped',
     positionTick: 0,
+    jumpCount: 0,
     tempoFactor: 1,
     baseBpm: null,
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
@@ -241,7 +247,6 @@ export const useAppStore = create<AppState>((set, get) => {
         assignment,
         transport: 'stopped',
         positionTick: 0,
-        loop: { enabled: false, startBar: 1, endBar: measureCount(song) },
         error: null
       })
       if (restored) get().showNotice('Restored your settings for this file')
@@ -281,8 +286,8 @@ export const useAppStore = create<AppState>((set, get) => {
     togglePlay: () => (get().transport === 'playing' ? get().pause() : get().play()),
 
     stop: async () => {
-      const { song, loop } = get()
-      set({ transport: 'stopped', positionTick: song ? stopPosition(song, loop) : 0 })
+      const { song, loop, jumpCount } = get()
+      set({ transport: 'stopped', positionTick: song ? stopPosition(song, loop) : 0, jumpCount: jumpCount + 1 })
       if (engine?.isPlaying) await engine.pause()
     },
 
@@ -290,7 +295,7 @@ export const useAppStore = create<AppState>((set, get) => {
       const { song } = get()
       if (!song) return
       const clamped = Math.max(0, Math.min(tick, song.durationTicks))
-      set({ positionTick: clamped })
+      set({ positionTick: clamped, jumpCount: get().jumpCount + 1 })
       engine?.seek(clamped)
     },
 
@@ -363,6 +368,8 @@ export const useAppStore = create<AppState>((set, get) => {
       if (!song || !assignment || !file || get().exportProgress !== null) return
       // The dialog's range choice decides, whether or not looping is switched on.
       const range = exportSettings.range === 'loop' ? loopTicks(song, loop) : null
+      const repeats = range ? exportSettings.repeats : 1
+      const exported = range ? songWithin(song, range, repeats) : song
 
       const practice = trackDisplayName(get(), selectedTrackId)
       const suffix =
@@ -372,7 +379,8 @@ export const useAppStore = create<AppState>((set, get) => {
             ? ` - without ${practice}`
             : ''
       const tempo = tempoFactor === 1 ? '' : ` (${Math.round(tempoFactor * 100)}%)`
-      const bars = range ? ` (bars ${loop.startBar}-${loop.endBar})` : ''
+      const times = repeats > 1 ? `, ${repeats}x` : ''
+      const bars = range ? ` (bars ${loop.startBar}-${loop.endBar}${times})` : ''
       const defaultName = `${file.name.replace(/\.midi?$/i, '')}${suffix}${bars}${tempo}.mp3`
 
       exportCancelled = false
@@ -381,9 +389,9 @@ export const useAppStore = create<AppState>((set, get) => {
       try {
         const result = await window.api.exportMp3({
           defaultName,
-          midi: buildExportMidi(song, assignment, mixes, selectedTrackId, exportSettings.mode, range ?? undefined),
+          midi: buildExportMidi(exported, assignment, mixes, selectedTrackId, exportSettings.mode),
           startTick: range?.start ?? 0,
-          durationTicks: range ? Math.min(range.end, song.durationTicks) : song.durationTicks,
+          durationTicks: exported.durationTicks,
           tempoFactor: playbackRate(get()),
           bitrate: exportSettings.bitrate
         })
@@ -453,13 +461,14 @@ export const useAppStore = create<AppState>((set, get) => {
     resetSettings: () => {
       const { song } = get()
       if (!song) return
-      // Custom track names, the key reading and a corrected tempo describe the song, not the
-      // mix, so they stay.
+      // Custom track names, the key reading, a corrected tempo and the loop are not part of
+      // the mix, so they stay.
       applySettings({
         ...defaultSettings(song),
         trackLabels: get().trackLabels,
         keyChoice: get().keyChoice,
-        baseBpm: get().baseBpm
+        baseBpm: get().baseBpm,
+        loop: get().loop
       })
       get().showNotice('Mix and tempo reset')
     },
@@ -490,7 +499,8 @@ useAppStore.subscribe((state, prev) => {
     state.exportSettings !== prev.exportSettings ||
     state.trackLabels !== prev.trackLabels ||
     state.keyChoice !== prev.keyChoice ||
-    state.baseBpm !== prev.baseBpm
+    state.baseBpm !== prev.baseBpm ||
+    state.loop !== prev.loop
   if (!changed) return
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(() => {

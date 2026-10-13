@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import type { Song, Track } from '../model/song'
 import { trackDisplayName, useAppStore } from '../store/appStore'
 import { useSettings } from '../ui/settings'
-import { FOLLOW_POSITION, isFollowing, useWheelZoom } from './useWheelZoom'
+import { FOLLOW_POSITION, isFollowing, useRevealJumps, useWheelZoom } from './useWheelZoom'
 import { layoutStaff, type Accidental, type Clef, type StaffLayout } from './staffLayout'
 
 // U+FE0E requests the text (not emoji) presentation, which Windows otherwise draws in color.
@@ -30,6 +30,8 @@ export function StaffView({ song, track }: { song: Song; track: Track }): React.
 
   // Wheel zoom keeps the music under the mouse in place.
   const { takeAnchor: takeZoomAnchor } = useWheelZoom(scroller, (x) => (x - layout.originX) / layout.pxPerTick)
+
+  useRevealJumps(scroller, (tick) => layout.originX + tick * layout.pxPerTick)
 
   // After zooming: keep the spot under the mouse (wheel) or bring the playhead into view.
   // While following playback the playhead stays put instead, so the view doesn't jump to it.

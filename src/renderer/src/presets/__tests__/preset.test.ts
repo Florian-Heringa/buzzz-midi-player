@@ -15,10 +15,12 @@ const settingsFor = (song: Song): PlayerSettings => ({
   mixes: song.tracks.map((t, i) => ({ ...defaultMix(t), volume: 50 + i, pan: i - 1 })),
   tempoFactor: 0.75,
   selectedTrackId: 1,
-  exportSettings: { bitrate: 128, mode: 'practice-muted', range: 'loop' },
+  exportSettings: { bitrate: 128, mode: 'practice-muted', range: 'loop', repeats: 3 },
   trackLabels: song.tracks.map((_, i) => (i === 0 ? 'Me' : '')),
   keyChoice: { accidentals: 'flats', mode: 'minor' },
-  baseBpm: 96
+  baseBpm: 96,
+  // The test songs are one bar long.
+  loop: { enabled: true, startBar: 1, endBar: 1 }
 })
 
 describe('presets', () => {
@@ -59,6 +61,14 @@ describe('presets', () => {
     expect(applyPreset(reordered, saved, reordered.tracks.map(defaultMix)).trackLabels).toEqual(['', 'Me'])
   })
 
+  it('keeps a saved loop within the song', () => {
+    const song = songWith(['Soprano'])
+    const saved = { ...createPreset(song, settingsFor(song)), loop: { enabled: true, startBar: 4, endBar: 9 } }
+    expect(applyPreset(song, saved, song.tracks.map(defaultMix)).loop).toEqual({ enabled: true, startBar: 1, endBar: 1 })
+    const old = { ...createPreset(song, settingsFor(song)), loop: undefined }
+    expect(applyPreset(song, old, song.tracks.map(defaultMix)).loop).toEqual({ enabled: false, startBar: 1, endBar: 1 })
+  })
+
   it('pairs repeated track names in order', () => {
     const song = songWith(['Voice', 'Voice'])
     const saved = createPreset(song, settingsFor(song))
@@ -86,7 +96,9 @@ describe('presets', () => {
       muted: false,
       solo: false
     })
-    expect(preset.export).toEqual({ bitrate: 192, mode: 'mix', range: 'song' })
+    expect(preset.export).toEqual({ bitrate: 192, mode: 'mix', range: 'song', repeats: 1 })
+    expect(preset.loop).toBeUndefined()
+    expect(parsePreset({ version: 1, tracks: [], export: { repeats: 99 } }).export.repeats).toBe(20)
     expect(preset.baseBpm).toBeUndefined()
     expect(parsePreset({ version: 1, tracks: [], baseBpm: 1000 }).baseBpm).toBe(400)
     expect(parsePreset({ version: 1, tracks: [], baseBpm: '96' }).baseBpm).toBeUndefined()

@@ -44,7 +44,7 @@ const check = (name, ok, detail) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`)
 }
 
-// APP_EXECUTABLE runs a packaged build instead, e.g. "dist/win-unpacked/Electron MIDI Player.exe".
+// APP_EXECUTABLE runs a packaged build instead, e.g. "dist/win-unpacked/Buzzz Midi Player.exe".
 const packaged = process.env.APP_EXECUTABLE ? resolve(APP_DIR, process.env.APP_EXECUTABLE) : null
 const app = await electron.launch({
   executablePath: packaged ?? resolve(APP_DIR, 'node_modules/electron/dist/electron.exe'),
@@ -346,10 +346,24 @@ try {
   await page.keyboard.type('3')
   await page.keyboard.press('Tab')
   check('entering a loop start bar moves the playhead there', (await tick()) === 3840, `tick ${await tick()}`)
+  // Jumps scroll the notes so the playhead is in sight (the sample is wider than the view).
+  const playheadInView = () =>
+    page.evaluate(() => {
+      const scroller = document.querySelector('.staff-view__scroller')
+      const line = scroller.querySelector('.staff__playhead').getBoundingClientRect()
+      const view = scroller.getBoundingClientRect()
+      return line.left >= view.left && line.right <= view.right
+    })
   await page.click('button[aria-label="Go to loop end"]')
   check('"go to loop end" moves to the loop\'s last bar', (await tick()) === 5 * 1920, `tick ${await tick()}`)
+  check('the notes scroll to show a jump to the loop end', await playheadInView())
   await page.click('button[aria-label="Go to loop start"]')
   check('"go to loop start" moves to the loop start', (await tick()) === 3840, `tick ${await tick()}`)
+  check('the notes scroll to show a jump to the loop start', await playheadInView())
+  await setRange('.transport__position', 14000)
+  check('the notes scroll to show a position chosen on the slider', await playheadInView())
+  await setRange('.transport__position', 0)
+  check('the notes scroll back for the song start', await playheadInView())
 
   // Stop returns to the loop start (bar 3 = tick 3840) only while the loop is on.
   await page.click('text=⟲ Loop')
@@ -829,6 +843,12 @@ try {
 
   await setRange('.transport__tempo input', 75)
   await page.locator('.strip__toggle[title="Mute"]').nth(1).click() // mute Alto
+  const savedLoopEnd = page.locator('input[aria-label="Loop end bar"]')
+  const savedLoopStart = page.locator('input[aria-label="Loop start bar"]')
+  await savedLoopEnd.fill('5')
+  await savedLoopEnd.press('Tab')
+  await savedLoopStart.fill('4')
+  await savedLoopStart.press('Tab')
   await page.waitForTimeout(1000) // auto-save is debounced
   const presetDir = join(USER_DATA, 'presets')
   const autoFiles = existsSync(presetDir) ? readdirSync(presetDir) : []
@@ -836,14 +856,18 @@ try {
   check(
     'changes are auto-saved',
     autoSaved?.tempoFactor === 0.75 && autoSaved.tracks[1].muted === true && autoSaved.tracks[0].label === 'Lead voice' &&
-      autoSaved.key?.mode === 'minor'
+      autoSaved.key?.mode === 'minor' &&
+      autoSaved.loop?.startBar === 4 &&
+      autoSaved.loop.endBar === 5
   )
 
   await page.click('text=Open MIDI') // reopen the same file
   await page.waitForSelector('text=Restored your settings')
   check(
-    'reopening restores tempo, mix, track names and key',
+    'reopening restores tempo, mix, track names, key and loop',
     (await tempoValue()) === '75' &&
+      (await savedLoopStart.inputValue()) === '4' &&
+      (await savedLoopEnd.inputValue()) === '5' &&
       (await page.locator('.key-picker__button').innerText()).startsWith('E minor') &&
       (await altoMuted()) === 'true' &&
       (await page.locator('.strip__name').first().innerText()) === 'Lead voice'
@@ -966,6 +990,7 @@ try {
   await page.click('text=Export MP3…')
   await page.click('.export-dialog input[name="export-range"] >> nth=1')
   check('the export dialog names the loop bars', (await page.locator('.export-dialog').innerText()).includes('Loop: bars 2–3'))
+  await page.selectOption('select[aria-label="Times to play the loop"]', '3')
   await page.click('.export-dialog .button--primary')
   await page.waitForFunction(() => document.querySelector('.error') || document.querySelector('.last-export'), null, {
     timeout: 120_000
@@ -976,16 +1001,18 @@ try {
         return (await new AudioContext().decodeAudioData(bytes.buffer)).duration
       }, readFileSync(loopFile).toString('base64'))
     : null
-  // Two bars at 80 BPM = 6 s, at 75% tempo = 8 s, plus up to 4 s of release tail.
+  // Two bars at 80 BPM = 6 s, at 75% tempo = 8 s, three times = 24 s, plus up to 4 s of tail.
   check(
-    'a loop export holds only the loop bars',
-    loopDecoded !== null && loopDecoded > 7.9 && loopDecoded < 12.5,
+    'a loop export holds the loop bars, repeated',
+    loopDecoded !== null && loopDecoded > 23.9 && loopDecoded < 28.5,
     loopDecoded ? `${loopDecoded.toFixed(1)} s` : 'no file'
   )
   const suggested = await app.evaluate(() => globalThis.__suggested)
-  check('the suggested name mentions the bars', suggested.includes('(bars 2-3)'), suggested)
+  check('the suggested name mentions the bars and repeats', suggested.includes('(bars 2-3, 3x)'), suggested)
   await page.click('text=Export MP3…')
+  await page.selectOption('select[aria-label="Times to play the loop"]', '1')
   await page.click('.export-dialog input[name="export-range"] >> nth=0')
+  check('the repeat choice only applies to the loop', await page.locator('select[aria-label="Times to play the loop"]').isDisabled())
   await page.click('.export-dialog >> text=Cancel')
 
   // Cancelling mid-render leaves no file and no error.

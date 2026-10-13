@@ -868,6 +868,18 @@ select {
   color: var(--muted);
 }
 
+/* Indented under the loop option it belongs to. */
+.export-dialog__repeats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 4px 24px;
+}
+
+.export-dialog__repeats:has(select:disabled) {
+  color: var(--muted);
+}
+
 .export-dialog__row {
   display: flex;
   justify-content: space-between;

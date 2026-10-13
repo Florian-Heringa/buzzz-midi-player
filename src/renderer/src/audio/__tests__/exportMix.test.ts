@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { exportMixes, songWithin } from '../exportMix'
 import { parseSong } from '../../model/song'
-import { buildMidi, note } from '../../model/__tests__/midiBuilder'
+import { buildMidi, note, tempo } from '../../model/__tests__/midiBuilder'
 import { effectiveVolume, type TrackMix } from '../mixer'
 
 const mix = (change: Partial<TrackMix> = {}): TrackMix => ({
@@ -59,6 +59,26 @@ describe('songWithin', () => {
       [1920, 960] // would end at 3120
     ])
     expect(part.durationTicks).toBe(2880)
+  })
+
+  it('repeats the range, with the tempo it starts with', () => {
+    const changing = parseSong(
+      buildMidi([[tempo(0, 60), tempo(1920, 120), tempo(2400, 90), ...note(1920, 60, 960), ...note(2880, 62, 480), ...note(3840, 64, 480)]]),
+      'x.mid'
+    )
+    const part = songWithin(changing, { start: 1920, end: 3840 }, 3)
+    expect(part.durationTicks).toBe(1920 + 3 * 1920)
+    expect(part.tracks[0].notes.map((n) => n.tick)).toEqual([1920, 2880, 3840, 4800, 5760, 6720])
+    // Each repeat starts at 120 BPM and changes to 90 a beat in, as in the file.
+    expect(part.tempoMap.tempos.map((t) => [t.tick, Math.round(60_000_000 / t.microsecondsPerBeat)])).toEqual([
+      [0, 60],
+      [1920, 120],
+      [2400, 90],
+      [3840, 120],
+      [4320, 90],
+      [5760, 120],
+      [6240, 90]
+    ])
   })
 
   it('leaves the song itself unchanged', () => {

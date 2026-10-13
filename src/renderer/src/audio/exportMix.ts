@@ -1,5 +1,6 @@
 import type { ChannelAssignment } from '../model/channels'
 import type { Song } from '../model/song'
+import { TempoMap } from '../model/tempoMap'
 import type { ExportMode } from '../presets/preset'
 import { channelStates, type TrackMix } from './mixer'
 import { buildPlaybackMidi } from './playbackMidi'
@@ -11,33 +12,54 @@ export interface TickRange {
 }
 
 /**
- * The MIDI file to render for an export, with the export mix written at tick 0. With a range,
- * only notes starting inside it are kept, cut off at its end (rendering starts at its start).
+ * The MIDI file to render for an export, with the export mix written at tick 0. For part of the
+ * song, pass it through `songWithin` first.
  */
 export function buildExportMidi(
   song: Song,
   assignment: ChannelAssignment,
   mixes: readonly TrackMix[],
   practiceTrackId: number | null,
-  mode: ExportMode,
-  range?: TickRange
+  mode: ExportMode
 ): Uint8Array {
   const exportMix = exportMixes(mixes, practiceTrackId, mode)
-  const states = channelStates(song, assignment, exportMix)
-  return buildPlaybackMidi(range ? songWithin(song, range) : song, assignment, states)
+  return buildPlaybackMidi(song, assignment, channelStates(song, assignment, exportMix))
 }
 
-/** The song with only the notes that start within `range`, ending by its end. */
-export function songWithin(song: Song, range: TickRange): Song {
+/**
+ * The song with only the notes that start within `range`, cut off at its end, and that part
+ * played `repeats` times in a row. Tempo and time signature changes inside the range repeat
+ * along; each repeat starts with the tempo and meter the range starts with.
+ */
+export function songWithin(song: Song, range: TickRange, repeats = 1): Song {
+  const end = Math.min(range.end, song.durationTicks)
+  const length = end - range.start
+  const offsets = Array.from({ length: Math.max(1, Math.round(repeats)) }, (_, i) => i * length)
+  const inRange = (tick: number): boolean => tick >= range.start && tick < end
+  /** Events before the range as they are, then per repeat: the one in effect at its start and those inside. */
+  const repeated = <T extends { tick: number }>(events: readonly T[]): T[] => {
+    const atStart = events.filter((e) => e.tick <= range.start).at(-1)
+    const inside = events.filter((e) => inRange(e.tick) && e.tick > range.start)
+    return [
+      ...events.filter((e) => e.tick < range.start),
+      ...offsets.flatMap((offset) => [
+        ...(atStart ? [{ ...atStart, tick: range.start + offset }] : []),
+        ...inside.map((e) => ({ ...e, tick: e.tick + offset }))
+      ])
+    ]
+  }
+
   return {
     ...song,
-    durationTicks: Math.min(song.durationTicks, range.end),
-    tracks: song.tracks.map((track) => ({
-      ...track,
-      notes: track.notes
-        .filter((n) => n.tick >= range.start && n.tick < range.end)
-        .map((n) => ({ ...n, durationTicks: Math.min(n.durationTicks, range.end - n.tick) }))
-    }))
+    durationTicks: range.start + offsets.length * length,
+    tempoMap: new TempoMap(song.ppq, repeated(song.tempoMap.tempos)),
+    timeSignatures: repeated(song.timeSignatures),
+    tracks: song.tracks.map((track) => {
+      const notes = track.notes
+        .filter((n) => inRange(n.tick))
+        .map((n) => ({ ...n, durationTicks: Math.min(n.durationTicks, end - n.tick) }))
+      return { ...track, notes: offsets.flatMap((offset) => notes.map((n) => ({ ...n, tick: n.tick + offset }))) }
+    })
   }
 }
 

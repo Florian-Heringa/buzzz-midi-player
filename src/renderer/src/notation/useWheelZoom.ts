@@ -10,6 +10,38 @@ export function isFollowing(): boolean {
   return useAppStore.getState().transport === 'playing' && getSettings().followPlayhead
 }
 
+/** Part of the view at either edge where a jump target counts as out of sight (pinned clef). */
+const REVEAL_MARGIN = 0.15
+
+/**
+ * After a jump of the play position (the position slider, loop buttons, looping, stop), scrolls
+ * the view so the playhead is visible: placed where following keeps it, unless it already is
+ * in sight. `xOfTick` maps a tick to an x in the scroller's content.
+ */
+export function useRevealJumps(
+  scroller: RefObject<HTMLDivElement | null>,
+  xOfTick: (tick: number) => number | null
+): void {
+  const xOfTickRef = useRef(xOfTick)
+  useEffect(() => {
+    xOfTickRef.current = xOfTick
+  })
+  useEffect(
+    () =>
+      useAppStore.subscribe((state, prev) => {
+        const el = scroller.current
+        if (state.jumpCount === prev.jumpCount || !el) return
+        const x = xOfTickRef.current(state.positionTick)
+        if (x === null) return
+        const margin = el.clientWidth * REVEAL_MARGIN
+        if (x < el.scrollLeft + margin || x > el.scrollLeft + el.clientWidth - margin) {
+          el.scrollLeft = x - el.clientWidth * FOLLOW_POSITION
+        }
+      }),
+    [scroller]
+  )
+}
+
 /** Zoom change per pixel of wheel movement (exponential, so each notch scales by the same %). */
 const ZOOM_PER_PIXEL = 0.0015
 
