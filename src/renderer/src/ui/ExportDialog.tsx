@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { EXPORT_BITRATES, type ExportMode } from '../presets/preset'
-import { trackDisplayName, useAppStore } from '../store/appStore'
+import { playbackRate, trackDisplayName, useAppStore } from '../store/appStore'
 
 const MODES: { value: ExportMode; label: string; hint: (part: string) => string }[] = [
   { value: 'mix', label: 'Current mix', hint: () => 'All tracks with your volume, pan, mute and solo settings.' },
@@ -17,6 +17,8 @@ export function ExportDialog(): React.JSX.Element | null {
   const settings = useAppStore((s) => s.exportSettings)
   const progress = useAppStore((s) => s.exportProgress)
   const tempoFactor = useAppStore((s) => s.tempoFactor)
+  const startBpm = useAppStore((s) => (s.song ? Math.round(s.song.tempoMap.bpmAt(0) * playbackRate(s)) : 0))
+  const loop = useAppStore((s) => s.loop)
   const practice = useAppStore((s) =>
     s.song && s.selectedTrackId !== null ? trackDisplayName(s, s.selectedTrackId) : null
   )
@@ -65,6 +67,31 @@ export function ExportDialog(): React.JSX.Element | null {
         ))}
       </fieldset>
 
+      <fieldset disabled={rendering}>
+        <legend>Range</legend>
+        <label className="export-dialog__mode">
+          <input
+            type="radio"
+            name="export-range"
+            checked={settings.range === 'song'}
+            onChange={() => setExportSettings({ range: 'song' })}
+          />
+          <span>Whole song</span>
+        </label>
+        <label className="export-dialog__mode">
+          <input
+            type="radio"
+            name="export-range"
+            checked={settings.range === 'loop'}
+            onChange={() => setExportSettings({ range: 'loop' })}
+          />
+          <span>
+            Loop: {loop.startBar === loop.endBar ? `bar ${loop.startBar}` : `bars ${loop.startBar}–${loop.endBar}`}
+            <small>Whether or not looping is switched on. Played once, with the sound fading out after.</small>
+          </span>
+        </label>
+      </fieldset>
+
       <div className="export-dialog__row">
         <label>
           Quality{' '}
@@ -80,7 +107,9 @@ export function ExportDialog(): React.JSX.Element | null {
             ))}
           </select>
         </label>
-        <span className="export-dialog__tempo">Tempo {Math.round(tempoFactor * 100)}%</span>
+        <span className="export-dialog__tempo">
+          Tempo {Math.round(tempoFactor * 100)}% · {startBpm} BPM
+        </span>
       </div>
 
       {rendering && (

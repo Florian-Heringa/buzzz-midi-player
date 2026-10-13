@@ -36,6 +36,8 @@ export function registerExportHandlers(
       const workerData: ExportWorkerData = {
         soundFontPath: soundFontPath(),
         midi: request.midi,
+        // From an untrusted renderer: keep the range sane.
+        startTick: Math.max(0, Math.min(Number(request.startTick) || 0, request.durationTicks)),
         durationTicks: request.durationTicks,
         tempoFactor: request.tempoFactor,
         bitrate: request.bitrate,

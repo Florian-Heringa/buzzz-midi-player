@@ -15,6 +15,9 @@ export interface RenderOptions {
   soundFont: ArrayBuffer
   /** Playback MIDI file with the export mix written at tick 0. */
   midi: ArrayBuffer
+  /** Tick to start rendering at (0 for the whole song). */
+  startTick?: number
+  /** Tick where the music ends; rendering continues until the sound has faded. */
   durationTicks: number
   tempoFactor: number
   /** MP3 bitrate in kbps. */
@@ -41,6 +44,10 @@ export async function renderMp3(options: RenderOptions): Promise<{ mp3: Uint8Arr
   try {
     await synth.loadSFont(options.soundFont)
     await synth.addSMFDataToPlayer(options.midi)
+    // Seeking only takes effect before the player starts. It still applies the mix, tempo and
+    // program events before the start; only notes are skipped.
+    const startTick = Math.max(0, Math.round(options.startTick ?? 0))
+    if (startTick > 0) synth.seekPlayer(startTick)
     await synth.playPlayer()
     synth.setPlayerTempo(TEMPO_TYPE_INTERNAL, options.tempoFactor)
 
@@ -65,7 +72,7 @@ export async function renderMp3(options: RenderOptions): Promise<{ mp3: Uint8Arr
       // The player keeps ticking past the last event, so the song end is detected by tick.
       const tick = synth.getPlayerCurrentTick()
       if (tick < options.durationTicks) {
-        const fraction = tick / options.durationTicks
+        const fraction = Math.max(0, tick - startTick) / (options.durationTicks - startTick)
         if (fraction - lastProgress >= 0.01) {
           lastProgress = fraction
           options.onProgress?.(fraction)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import {
   enharmonicFifths,
   estimateDiffersFromFile,
@@ -10,8 +10,17 @@ import {
   type KeySource,
   type Mode
 } from '../model/keys'
+import { lastLoopBarStart, loopTicks } from '../model/loop'
 import { measureCount } from '../model/measures'
-import { MAX_TEMPO_FACTOR, MIN_TEMPO_FACTOR, interpretedSong, useAppStore } from '../store/appStore'
+import { MAX_BASE_BPM, MIN_BASE_BPM } from '../presets/preset'
+import {
+  MAX_TEMPO_FACTOR,
+  MIN_TEMPO_FACTOR,
+  interpretedSong,
+  playbackRate,
+  tempoScale,
+  useAppStore
+} from '../store/appStore'
 import { formatTime } from './format'
 
 /** Top pane: file actions, song details, transport, tempo and loop controls. */
@@ -92,15 +101,16 @@ function LastExport(): React.JSX.Element | null {
 
 function SongSummary(): React.JSX.Element | null {
   const song = useAppStore(interpretedSong)
+  const scale = useAppStore(tempoScale)
   if (!song) return null
   const timeSig = song.timeSignatures[0]
   const key = song.keySignatures[0]
   const varies = song.tempoMap.tempos.length > 1
   const items: [string, string][] = [
-    ['Tempo', `${Math.round(song.tempoMap.bpmAt(0))} BPM${varies ? ' (varies)' : ''}`],
+    ['Tempo', `${Math.round(song.tempoMap.bpmAt(0) * scale)} BPM${varies ? ' (varies)' : ''}`],
     ['Time', `${timeSig.numerator}/${timeSig.denominator}`],
     ['Key', keyName(key.fifths, key.mode)],
-    ['Length', formatTime(song.tempoMap.tickToSeconds(song.durationTicks))],
+    ['Length', formatTime(song.tempoMap.tickToSeconds(song.durationTicks) / scale)],
     ['Bars', String(measureCount(song))],
     ['Tracks', String(song.tracks.length)]
   ]
@@ -110,31 +120,33 @@ function SongSummary(): React.JSX.Element | null {
       {items.map(([label, value]) => (
         <div key={label} className="song-summary__item">
           <dt>{label}</dt>
-          <dd>{label === 'Key' ? <KeyPicker name={value} /> : value}</dd>
+          <dd>
+            {label === 'Key' ? (
+              <KeyPicker name={value} />
+            ) : label === 'Tempo' ? (
+              <TempoPicker name={value} />
+            ) : (
+              value
+            )}
+          </dd>
         </div>
       ))}
     </dl>
   )
 }
 
-const KEY_OPTIONS: { accidentals: Accidentals; mode: Mode; label: string }[] = [
-  { accidentals: 'sharps', mode: 'major', label: '♯ Sharps · major' },
-  { accidentals: 'sharps', mode: 'minor', label: '♯ Sharps · minor' },
-  { accidentals: 'flats', mode: 'major', label: '♭ Flats · major' },
-  { accidentals: 'flats', mode: 'minor', label: '♭ Flats · minor' }
-]
-
 /**
- * The key as a button: choose whether it reads on the sharp or flat side (switching to the
- * enharmonic key where one exists) and as major or minor.
+ * A menu that opens under its button: closes on a click elsewhere, Escape or a resize. Fixed
+ * position, so the clipped song details can't hide it.
  */
-function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
-  const song = useAppStore((s) => s.song)
-  const keyChoice = useAppStore((s) => s.keyChoice)
-  const setKeyChoice = useAppStore((s) => s.setKeyChoice)
+function usePopover(): {
+  button: RefObject<HTMLButtonElement | null>
+  panel: RefObject<HTMLDivElement | null>
+  position: { top: number; left: number } | null
+  toggle: () => void
+} {
   const button = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
-  // Fixed position under the button, so the clipped header can't hide the menu.
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const open = position !== null
 
@@ -161,6 +173,108 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
     }
   }, [open])
 
+  const toggle = useCallback(() => {
+    setPosition((current) => {
+      const rect = button.current?.getBoundingClientRect()
+      return current || !rect ? null : { top: rect.bottom + 6, left: rect.left }
+    })
+  }, [])
+  return { button, panel, position, toggle }
+}
+
+/**
+ * The tempo as a button: correct the song's tempo when the file's is wrong. Tempo changes in
+ * the file keep their proportions; the practice tempo (%) applies on top.
+ */
+function TempoPicker({ name }: { name: string }): React.JSX.Element | null {
+  const song = useAppStore((s) => s.song)
+  const baseBpm = useAppStore((s) => s.baseBpm)
+  const setBaseBpm = useAppStore((s) => s.setBaseBpm)
+  const { button, panel, position, toggle } = usePopover()
+  const open = position !== null
+  if (!song) return null
+  const fileBpm = song.tempoMap.bpmAt(0)
+  const varies = song.tempoMap.tempos.length > 1
+
+  return (
+    <>
+      <button
+        ref={button}
+        className="summary-picker__button tempo-picker__button"
+        onClick={toggle}
+        aria-haspopup="true"
+        aria-expanded={open}
+        title={
+          baseBpm === null
+            ? 'Change the song tempo (if the file has it wrong)'
+            : `Corrected from ${formatBpm(fileBpm)} BPM in the file. Click to change.`
+        }
+      >
+        {name}
+        <span aria-hidden> ▾</span>
+      </button>
+      {open && (
+        <div
+          ref={panel}
+          className="summary-picker__panel tempo-picker__panel"
+          role="dialog"
+          aria-label="Song tempo"
+          style={position}
+        >
+          <fieldset>
+            <legend>Song tempo</legend>
+            <p className="summary-picker__note">
+              For files with the wrong tempo. The tempo slider then speeds up or slows down from here.
+              {varies && ' Tempo changes in the file move along.'}
+            </p>
+            <label className="tempo-picker__field">
+              <span>{varies ? 'Starts at' : 'Tempo'}</span>
+              <NumberInput
+                value={Math.round(baseBpm ?? fileBpm)}
+                label="Song tempo in BPM"
+                title={`${MIN_BASE_BPM}–${MAX_BASE_BPM} BPM`}
+                onCommit={setBaseBpm}
+              />
+              <span>BPM</span>
+            </label>
+            <div className="tempo-picker__file">
+              <span>
+                The file says <strong>{formatBpm(fileBpm)} BPM</strong>
+              </span>
+              <button onClick={() => setBaseBpm(null)} disabled={baseBpm === null}>
+                Use the file’s tempo
+              </button>
+            </div>
+          </fieldset>
+        </div>
+      )}
+    </>
+  )
+}
+
+/** BPM with at most one decimal: 120, 97.5. */
+function formatBpm(bpm: number): string {
+  return String(Math.round(bpm * 10) / 10)
+}
+
+const KEY_OPTIONS: { accidentals: Accidentals; mode: Mode; label: string }[] = [
+  { accidentals: 'sharps', mode: 'major', label: '♯ Sharps · major' },
+  { accidentals: 'sharps', mode: 'minor', label: '♯ Sharps · minor' },
+  { accidentals: 'flats', mode: 'major', label: '♭ Flats · major' },
+  { accidentals: 'flats', mode: 'minor', label: '♭ Flats · minor' }
+]
+
+/**
+ * The key as a button: choose whether it reads on the sharp or flat side (switching to the
+ * enharmonic key where one exists) and as major or minor.
+ */
+function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
+  const song = useAppStore((s) => s.song)
+  const keyChoice = useAppStore((s) => s.keyChoice)
+  const setKeyChoice = useAppStore((s) => s.setKeyChoice)
+  const { button, panel, position, toggle } = usePopover()
+  const open = position !== null
+
   if (!song) return null
   const fileKey = song.keySignatures[0]
   const current: KeyChoice = keyChoice ?? { ...keyChoiceFromFile(fileKey), source: 'file' }
@@ -172,16 +286,11 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
   const chooseSource = (next: KeySource): void =>
     setKeyChoice({ ...keyChoiceFromFile(sourceKey(song, next)), source: next })
 
-  const toggle = (): void => {
-    const rect = button.current?.getBoundingClientRect()
-    setPosition(open || !rect ? null : { top: rect.bottom + 6, left: rect.left })
-  }
-
   return (
     <>
       <button
         ref={button}
-        className="key-picker__button"
+        className="summary-picker__button key-picker__button"
         onClick={toggle}
         aria-haspopup="true"
         aria-expanded={open}
@@ -195,7 +304,7 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
         <span aria-hidden> ▾</span>
       </button>
       {open && (
-        <div ref={panel} className="key-picker__panel" role="dialog" aria-label="Key" style={position}>
+        <div ref={panel} className="summary-picker__panel key-picker__panel" role="dialog" aria-label="Key" style={position}>
           {offerEstimate && song.estimatedKey && (
             <fieldset className="key-picker__sources">
               <legend>Key signature</legend>
@@ -221,7 +330,7 @@ function KeyPicker({ name }: { name: string }): React.JSX.Element | null {
           <fieldset>
             <legend>Read the key as</legend>
             {fileKey.estimated && (
-              <p className="key-picker__note">This file has no key signature, so the key was estimated from the notes.</p>
+              <p className="summary-picker__note">This file has no key signature, so the key was estimated from the notes.</p>
             )}
             {KEY_OPTIONS.map((option) => {
               const fifths = enharmonicFifths(baseKey.fifths, option.accidentals)
@@ -254,7 +363,7 @@ function TransportRow(): React.JSX.Element | null {
   const song = useAppStore((s) => s.song)
   const transport = useAppStore((s) => s.transport)
   const positionTick = useAppStore((s) => s.positionTick)
-  const tempoFactor = useAppStore((s) => s.tempoFactor)
+  const rate = useAppStore(playbackRate)
   const engineStatus = useAppStore((s) => s.engineStatus)
   const togglePlay = useAppStore((s) => s.togglePlay)
   const stop = useAppStore((s) => s.stop)
@@ -276,8 +385,8 @@ function TransportRow(): React.JSX.Element | null {
   }, [togglePlay])
 
   if (!song) return null
-  const elapsed = song.tempoMap.tickToSeconds(positionTick) / tempoFactor
-  const total = song.tempoMap.tickToSeconds(song.durationTicks) / tempoFactor
+  const elapsed = song.tempoMap.tickToSeconds(positionTick) / rate
+  const total = song.tempoMap.tickToSeconds(song.durationTicks) / rate
   const playing = transport === 'playing'
 
   return (
@@ -317,8 +426,9 @@ function TempoControl(): React.JSX.Element | null {
   const tempoFactor = useAppStore((s) => s.tempoFactor)
   const positionTick = useAppStore((s) => s.positionTick)
   const setTempoFactor = useAppStore((s) => s.setTempoFactor)
+  const rate = useAppStore(playbackRate)
   if (!song) return null
-  const bpm = Math.round(song.tempoMap.bpmAt(positionTick) * tempoFactor)
+  const bpm = Math.round(song.tempoMap.bpmAt(positionTick) * rate)
 
   return (
     // Double-clicking anywhere on the control, including its label and value, resets it.
@@ -343,13 +453,18 @@ function TempoControl(): React.JSX.Element | null {
   )
 }
 
-/** Loop range controls. Playback does not loop yet; these only set the range. */
+/** Loop on/off, the loop's bars, and jumps to its start and its last bar. */
 function LoopControls(): React.JSX.Element | null {
   const song = useAppStore((s) => s.song)
   const loop = useAppStore((s) => s.loop)
   const setLoop = useAppStore((s) => s.setLoop)
+  const seek = useAppStore((s) => s.seek)
   if (!song) return null
   const bars = measureCount(song)
+  const goToStart = (): void => {
+    const state = useAppStore.getState()
+    if (state.song) seek(loopTicks(state.song, state.loop).start)
+  }
 
   return (
     <div className="control-group loop-controls" role="group" aria-label="Loop">
@@ -357,46 +472,65 @@ function LoopControls(): React.JSX.Element | null {
         className={loop.enabled ? 'button--active' : ''}
         aria-pressed={loop.enabled}
         onClick={() => setLoop({ enabled: !loop.enabled })}
-        title="Loop between the chosen bars (playback looping is not implemented yet)"
+        title="Loop between the chosen bars: playback jumps back to the first bar after the last"
       >
         ⟲ Loop
       </button>
       <label className="loop-controls__bar">
         <span className="control-group__label">Bars</span>
-        <BarInput
+        <NumberInput
           value={loop.startBar}
-          bars={bars}
           label="Loop start bar"
-          onCommit={(startBar) => setLoop({ startBar })}
+          title={`Bar 1–${bars}; the playhead moves there`}
+          onCommit={(startBar) => {
+            setLoop({ startBar })
+            goToStart()
+          }}
         />
       </label>
       <label className="loop-controls__bar">
         <span className="control-group__label">to</span>
-        <BarInput
+        <NumberInput
           value={loop.endBar}
-          bars={bars}
           label="Loop end bar"
+          title={`Bar 1–${bars}`}
           onCommit={(endBar) => setLoop({ endBar })}
         />
       </label>
+      <button
+        className="loop-controls__jump"
+        onClick={goToStart}
+        aria-label="Go to loop start"
+        title={`Go to the loop start (bar ${loop.startBar})`}
+      >
+        ⇤
+      </button>
+      <button
+        className="loop-controls__jump"
+        onClick={() => seek(lastLoopBarStart(song, loop))}
+        aria-label="Go to loop end"
+        title={`Go to the loop's last bar (bar ${loop.endBar})`}
+      >
+        ⇥
+      </button>
     </div>
   )
 }
 
 /**
- * Bar number field. Typing is free-form; the value is validated (by the store) only when
+ * Whole-number field. Typing is free-form; the value is validated (by the caller) only when
  * focus leaves the field or Enter is pressed. Escape cancels; ↑/↓ step immediately.
  */
-function BarInput({
+function NumberInput({
   value,
-  bars,
   label,
+  title,
   onCommit
 }: {
   value: number
-  bars: number
   label: string
-  onCommit: (bar: number) => void
+  title: string
+  onCommit: (value: number) => void
 }): React.JSX.Element {
   // While editing, the typed text; null when showing the committed value.
   const [draft, setDraft] = useState<string | null>(null)
@@ -429,7 +563,7 @@ function BarInput({
       onBlur={commit}
       onKeyDown={onKeyDown}
       aria-label={label}
-      title={`Bar 1–${bars}`}
+      title={title}
     />
   )
 }

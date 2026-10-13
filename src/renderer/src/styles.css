@@ -959,10 +959,10 @@ select {
   color: var(--text);
 }
 
-/* ---- Key picker (song details) ---- */
+/* ---- Key and tempo pickers (song details) ---- */
 
 /* Looks like the other values, with a hint that it can be clicked. */
-.key-picker__button {
+.summary-picker__button {
   padding: 0 4px;
   border: none;
   border-bottom: 1px dashed currentColor;
@@ -972,12 +972,12 @@ select {
   font: inherit;
 }
 
-.key-picker__button:hover {
+.summary-picker__button:hover {
   border-bottom-style: solid;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.key-picker__panel {
+.summary-picker__panel {
   position: fixed;
   z-index: 10;
   padding: 10px;
@@ -992,7 +992,7 @@ select {
   white-space: normal;
 }
 
-.key-picker__panel fieldset {
+.summary-picker__panel fieldset {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1002,19 +1002,19 @@ select {
   border-radius: var(--radius);
 }
 
-.key-picker__panel legend {
+.summary-picker__panel legend {
   padding: 0 4px;
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-.key-picker__panel {
+.summary-picker__panel {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.key-picker__note {
+.summary-picker__note {
   max-width: 300px;
   margin: 0 0 4px;
   color: var(--muted);
@@ -1043,6 +1043,31 @@ select {
 .key-picker__result small {
   color: var(--muted);
   font-weight: normal;
+}
+
+.tempo-picker__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tempo-picker__field input {
+  width: 56px;
+  text-align: center;
+}
+
+.tempo-picker__file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tempo-picker__file strong {
+  color: var(--text);
 }
 
 /* ---- Settings dialog ---- */

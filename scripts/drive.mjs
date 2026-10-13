@@ -325,7 +325,7 @@ try {
   check('pane sizes are remembered', savedSizes !== null)
   await page.locator('.split-panes__divider').nth(1).dblclick()
 
-  // Loop controls (playback does not loop yet): typing is free; the range is checked on blur.
+  // Loop controls: typing is free; the range is checked on blur.
   const loopStart = page.locator('input[aria-label="Loop start bar"]')
   const loopEnd = page.locator('input[aria-label="Loop end bar"]')
   check('loop range defaults to the whole song', (await loopStart.inputValue()) === '1' && (await loopEnd.inputValue()) === '8')
@@ -345,6 +345,11 @@ try {
   await loopStart.click()
   await page.keyboard.type('3')
   await page.keyboard.press('Tab')
+  check('entering a loop start bar moves the playhead there', (await tick()) === 3840, `tick ${await tick()}`)
+  await page.click('button[aria-label="Go to loop end"]')
+  check('"go to loop end" moves to the loop\'s last bar', (await tick()) === 5 * 1920, `tick ${await tick()}`)
+  await page.click('button[aria-label="Go to loop start"]')
+  check('"go to loop start" moves to the loop start', (await tick()) === 3840, `tick ${await tick()}`)
 
   // Stop returns to the loop start (bar 3 = tick 3840) only while the loop is on.
   await page.click('text=⟲ Loop')
@@ -687,6 +692,49 @@ try {
   const afterSeek = await tick()
   check('seek jumps and keeps playing', afterSeek > 7680 && afterSeek < 7680 + 800, `tick ${afterSeek}`)
 
+  // Looping bar 2 (ticks 1920–3840): playback jumps back to its start at its end.
+  const loopStartInput = page.locator('input[aria-label="Loop start bar"]')
+  const loopEndInput = page.locator('input[aria-label="Loop end bar"]')
+  await loopEndInput.fill('2')
+  await loopEndInput.press('Tab')
+  await loopStartInput.fill('2')
+  await loopStartInput.press('Tab')
+  await page.click('text=⟲ Loop')
+  await setRange('.transport__position', 3500)
+  const looped = []
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(150)
+    looped.push(await tick())
+  }
+  check(
+    'playback loops back to the loop start at the loop end',
+    looped.every((t) => t >= 1920 && t < 3840 + 100) && looped.some((t) => t < 3500),
+    looped.join(' ')
+  )
+  await page.click('text=⟲ Loop')
+  await setRange('.transport__position', 7680)
+
+  // Correcting the song tempo (80 → 160 BPM) doubles the speed; the file's tempo comes back.
+  await page.click('.tempo-picker__button')
+  const bpmInput = page.locator('input[aria-label="Song tempo in BPM"]')
+  check('the tempo menu shows the file tempo', (await bpmInput.inputValue()) === '80')
+  await bpmInput.fill('160')
+  await bpmInput.press('Enter')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+  const fastRate = await ticksPerSecond()
+  check('a corrected song tempo changes playback speed', Math.abs(fastRate - normalRate * 2) < 150, `${fastRate} ticks/s`)
+  check(
+    'the song details and tempo readout show the corrected tempo',
+    (await page.locator('.tempo-picker__button').innerText()).startsWith('160 BPM') &&
+      (await page.locator('.transport__tempo-value').innerText()).includes('160 BPM')
+  )
+  await page.click('.tempo-picker__button')
+  await page.click('.tempo-picker__panel >> text=Use the file’s tempo')
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+  check('the file tempo can be restored', (await page.locator('.tempo-picker__button').innerText()).startsWith('80 BPM'))
+
   // Mixer: mute every track, then seek back. The player replays volume events on seek, so
   // this also checks that the worklet hook keeps the muted values.
   const muteButtons = page.locator('.strip__toggle[title="Mute"]')
@@ -899,6 +947,46 @@ try {
   )
   await page.click('.last-export__dismiss')
   check('the export entry can be dismissed', (await page.locator('.last-export').count()) === 0)
+
+  // Export only the loop (bars 2–3), with looping switched off: the dialog's choice decides.
+  const loopFile = join(USER_DATA, 'loop.mp3')
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async (_window, options) => {
+      globalThis.__suggested = options.defaultPath
+      return { canceled: false, filePath: path }
+    }
+  }, loopFile)
+  const loopEndField = page.locator('input[aria-label="Loop end bar"]')
+  await loopEndField.fill('3')
+  await loopEndField.press('Tab')
+  const loopStartField = page.locator('input[aria-label="Loop start bar"]')
+  await loopStartField.fill('2')
+  await loopStartField.press('Tab')
+  check('looping is off for the loop export', (await page.locator('text=⟲ Loop').getAttribute('aria-pressed')) === 'false')
+  await page.click('text=Export MP3…')
+  await page.click('.export-dialog input[name="export-range"] >> nth=1')
+  check('the export dialog names the loop bars', (await page.locator('.export-dialog').innerText()).includes('Loop: bars 2–3'))
+  await page.click('.export-dialog .button--primary')
+  await page.waitForFunction(() => document.querySelector('.error') || document.querySelector('.last-export'), null, {
+    timeout: 120_000
+  })
+  const loopDecoded = existsSync(loopFile)
+    ? await page.evaluate(async (base64) => {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+        return (await new AudioContext().decodeAudioData(bytes.buffer)).duration
+      }, readFileSync(loopFile).toString('base64'))
+    : null
+  // Two bars at 80 BPM = 6 s, at 75% tempo = 8 s, plus up to 4 s of release tail.
+  check(
+    'a loop export holds only the loop bars',
+    loopDecoded !== null && loopDecoded > 7.9 && loopDecoded < 12.5,
+    loopDecoded ? `${loopDecoded.toFixed(1)} s` : 'no file'
+  )
+  const suggested = await app.evaluate(() => globalThis.__suggested)
+  check('the suggested name mentions the bars', suggested.includes('(bars 2-3)'), suggested)
+  await page.click('text=Export MP3…')
+  await page.click('.export-dialog input[name="export-range"] >> nth=0')
+  await page.click('.export-dialog >> text=Cancel')
 
   // Cancelling mid-render leaves no file and no error.
   const cancelledFile = join(USER_DATA, 'cancelled.mp3')

@@ -13,6 +13,8 @@ export interface ExportRequest {
   defaultName: string
   /** Playback MIDI file with the export mix written at tick 0. */
   midi: Uint8Array
+  /** Where rendering starts and ends, in ticks (the song end, or the end of the loop). */
+  startTick: number
   durationTicks: number
   tempoFactor: number
   /** MP3 bitrate in kbps. */

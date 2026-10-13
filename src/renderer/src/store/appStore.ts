@@ -6,7 +6,7 @@ import { channelStates, defaultMix, resetMixes, type MixReset, type TrackMix } f
 import { buildPlaybackMidi } from '../audio/playbackMidi'
 import { assignChannels, type ChannelAssignment } from '../model/channels'
 import { keyChoiceFromFile, withKeyChoice, type KeyChoice } from '../model/keys'
-import { stopPosition, updateLoop, type LoopRange } from '../model/loop'
+import { loopJump, loopTicks, stopPosition, updateLoop, type LoopRange } from '../model/loop'
 import { measureCount } from '../model/measures'
 import { parseSong, type Song } from '../model/song'
 import { getSettings } from '../ui/settings'
@@ -14,7 +14,9 @@ import {
   applyPreset,
   createPreset,
   DEFAULT_EXPORT_SETTINGS,
+  MAX_BASE_BPM,
   MAX_TRACK_LABEL_LENGTH,
+  MIN_BASE_BPM,
   parsePreset,
   type ExportSettings,
   type PlayerSettings
@@ -45,8 +47,10 @@ interface AppState {
   engineStatus: EngineStatus
   transport: TransportStatus
   positionTick: number
-  /** Playback speed relative to the file's tempo (1 = original). */
+  /** Playback speed relative to the song's tempo (1 = original). */
   tempoFactor: number
+  /** The song's starting tempo in BPM, when the file's is wrong; null follows the file. */
+  baseBpm: number | null
   exportSettings: ExportSettings
   exportDialogOpen: boolean
   settingsOpen: boolean
@@ -54,7 +58,7 @@ interface AppState {
   exportProgress: number | null
   /** The most recently exported file, shown until dismissed or replaced by the next export. */
   lastExport: { path: string; name: string } | null
-  /** Loop range chosen in the UI. Not yet applied to playback. */
+  /** Loop range; while enabled, playback jumps back to its start at its end. */
   loop: LoopRange
   error: string | null
   /** Short-lived confirmation message, e.g. "Preset saved". */
@@ -70,6 +74,8 @@ interface AppState {
   stop(): Promise<void>
   seek(tick: number): void
   setTempoFactor(factor: number): void
+  /** Corrects the song's starting tempo (other tempo changes scale along); null restores the file's. */
+  setBaseBpm(bpm: number | null): void
   updateMix(trackId: number, change: Partial<TrackMix>): void
   /** Resets a mixer setting (or all of them) for every track. */
   resetAllTracks(reset: MixReset): void
@@ -111,7 +117,7 @@ export const useAppStore = create<AppState>((set, get) => {
         .then((data) => AudioEngine.create(data.slice().buffer))
         .then((created) => {
           engine = created
-          engine.setTempoFactor(get().tempoFactor)
+          engine.setTempoFactor(playbackRate(get()))
           set({ engineStatus: 'ready' })
           return created
         })
@@ -141,9 +147,10 @@ export const useAppStore = create<AppState>((set, get) => {
       selectedTrackId: settings.selectedTrackId,
       exportSettings: settings.exportSettings,
       trackLabels: settings.trackLabels,
-      keyChoice: settings.keyChoice
+      keyChoice: settings.keyChoice,
+      baseBpm: settings.baseBpm
     })
-    engine?.setTempoFactor(settings.tempoFactor)
+    engine?.setTempoFactor(playbackRate(get()))
     void engine?.setChannels(currentChannelStates())
   }
 
@@ -153,10 +160,14 @@ export const useAppStore = create<AppState>((set, get) => {
     selectedTrackId: song.tracks[0]?.id ?? null,
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     trackLabels: song.tracks.map(() => ''),
-    keyChoice: null
+    keyChoice: null,
+    baseBpm: null
   })
 
-  /** Follows the player position while playing and stops at the end of the song. */
+  /**
+   * Follows the player position while playing: loops back at the loop end (when looping) and
+   * stops at the end of the song.
+   */
   const trackPosition = (): void => {
     let pending = false
     const step = (): void => {
@@ -166,8 +177,11 @@ export const useAppStore = create<AppState>((set, get) => {
         pending = true
         void engine.currentTick().then((tick) => {
           pending = false
-          if (get().transport !== 'playing') return
-          if (tick >= song.durationTicks) void get().stop()
+          const state = get()
+          if (state.transport !== 'playing') return
+          const jump = loopJump(song, state.loop, state.positionTick, tick)
+          if (jump !== null) state.seek(jump)
+          else if (tick >= song.durationTicks) void state.stop()
           else set({ positionTick: tick })
         })
       }
@@ -188,6 +202,7 @@ export const useAppStore = create<AppState>((set, get) => {
     transport: 'stopped',
     positionTick: 0,
     tempoFactor: 1,
+    baseBpm: null,
     exportSettings: { ...DEFAULT_EXPORT_SETTINGS },
     exportDialogOpen: false,
     settingsOpen: false,
@@ -282,7 +297,17 @@ export const useAppStore = create<AppState>((set, get) => {
     setTempoFactor: (factor) => {
       const clamped = Math.max(MIN_TEMPO_FACTOR, Math.min(MAX_TEMPO_FACTOR, factor))
       set({ tempoFactor: clamped })
-      engine?.setTempoFactor(clamped)
+      engine?.setTempoFactor(playbackRate(get()))
+    },
+
+    setBaseBpm: (bpm) => {
+      const { song } = get()
+      if (!song) return
+      const fileBpm = song.tempoMap.bpmAt(0)
+      const clamped = bpm === null ? null : Math.max(MIN_BASE_BPM, Math.min(MAX_BASE_BPM, bpm))
+      // Setting the file's own tempo is the same as following the file.
+      set({ baseBpm: clamped === null || Math.abs(clamped - fileBpm) < 0.01 ? null : clamped })
+      engine?.setTempoFactor(playbackRate(get()))
     },
 
     setKeyChoice: (choice) => {
@@ -334,8 +359,10 @@ export const useAppStore = create<AppState>((set, get) => {
     },
 
     startExport: async () => {
-      const { song, assignment, file, mixes, selectedTrackId, tempoFactor, exportSettings } = get()
+      const { song, assignment, file, mixes, selectedTrackId, tempoFactor, exportSettings, loop } = get()
       if (!song || !assignment || !file || get().exportProgress !== null) return
+      // The dialog's range choice decides, whether or not looping is switched on.
+      const range = exportSettings.range === 'loop' ? loopTicks(song, loop) : null
 
       const practice = trackDisplayName(get(), selectedTrackId)
       const suffix =
@@ -345,7 +372,8 @@ export const useAppStore = create<AppState>((set, get) => {
             ? ` - without ${practice}`
             : ''
       const tempo = tempoFactor === 1 ? '' : ` (${Math.round(tempoFactor * 100)}%)`
-      const defaultName = `${file.name.replace(/\.midi?$/i, '')}${suffix}${tempo}.mp3`
+      const bars = range ? ` (bars ${loop.startBar}-${loop.endBar})` : ''
+      const defaultName = `${file.name.replace(/\.midi?$/i, '')}${suffix}${bars}${tempo}.mp3`
 
       exportCancelled = false
       set({ exportProgress: 0, error: null })
@@ -353,9 +381,10 @@ export const useAppStore = create<AppState>((set, get) => {
       try {
         const result = await window.api.exportMp3({
           defaultName,
-          midi: buildExportMidi(song, assignment, mixes, selectedTrackId, exportSettings.mode),
-          durationTicks: song.durationTicks,
-          tempoFactor,
+          midi: buildExportMidi(song, assignment, mixes, selectedTrackId, exportSettings.mode, range ?? undefined),
+          startTick: range?.start ?? 0,
+          durationTicks: range ? Math.min(range.end, song.durationTicks) : song.durationTicks,
+          tempoFactor: playbackRate(get()),
           bitrate: exportSettings.bitrate
         })
         if (result) {
@@ -424,11 +453,13 @@ export const useAppStore = create<AppState>((set, get) => {
     resetSettings: () => {
       const { song } = get()
       if (!song) return
-      // Custom track names and the key reading are not part of the mix, so they stay.
+      // Custom track names, the key reading and a corrected tempo describe the song, not the
+      // mix, so they stay.
       applySettings({
         ...defaultSettings(song),
         trackLabels: get().trackLabels,
-        keyChoice: get().keyChoice
+        keyChoice: get().keyChoice,
+        baseBpm: get().baseBpm
       })
       get().showNotice('Mix and tempo reset')
     },
@@ -458,7 +489,8 @@ useAppStore.subscribe((state, prev) => {
     state.selectedTrackId !== prev.selectedTrackId ||
     state.exportSettings !== prev.exportSettings ||
     state.trackLabels !== prev.trackLabels ||
-    state.keyChoice !== prev.keyChoice
+    state.keyChoice !== prev.keyChoice ||
+    state.baseBpm !== prev.baseBpm
   if (!changed) return
   clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(() => {
@@ -469,6 +501,16 @@ useAppStore.subscribe((state, prev) => {
       .catch((err) => console.warn('Auto-save failed:', err))
   }, AUTO_SAVE_DELAY_MS)
 })
+
+/** How much faster than the file's own tempo a corrected base tempo plays (1 = no correction). */
+export function tempoScale(state: Pick<AppState, 'song' | 'baseBpm'>): number {
+  return state.song && state.baseBpm !== null ? state.baseBpm / state.song.tempoMap.bpmAt(0) : 1
+}
+
+/** Playback speed relative to the file: the practice tempo on top of a corrected base tempo. */
+export function playbackRate(state: Pick<AppState, 'song' | 'baseBpm' | 'tempoFactor'>): number {
+  return state.tempoFactor * tempoScale(state)
+}
 
 /** Name shown for a track: its custom name, or the name from the MIDI file. */
 export function trackDisplayName(state: Pick<AppState, 'song' | 'trackLabels'>, trackId: number | null): string {

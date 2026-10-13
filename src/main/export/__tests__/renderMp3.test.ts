@@ -71,6 +71,22 @@ describe.skipIf(!existsSync(SOUNDFONT))('renderMp3 (with the bundled SoundFont)'
     expect(Math.abs(encodedSeconds - seconds)).toBeLessThan(0.2)
   })
 
+  it('renders only from the start tick on', { timeout: 60_000 }, async () => {
+    const whole = await render(1)
+    const fromMiddle = await renderMp3({
+      soundFont: sfBuffer(),
+      midi: oneNoteMidi(),
+      startTick: 960,
+      durationTicks: 1920,
+      tempoFactor: 1,
+      bitrate: 128,
+      sampleRate: SAMPLE_RATE
+    })
+    // Half the music (1 of 2 s); the note started before the range, so there is little tail.
+    expect(fromMiddle.seconds).toBeGreaterThan(0.9)
+    expect(whole.seconds - fromMiddle.seconds).toBeGreaterThan(0.9)
+  })
+
   it('stretches the song when slowed down', { timeout: 60_000 }, async () => {
     const normal = await render(1)
     const slow = await render(0.5)

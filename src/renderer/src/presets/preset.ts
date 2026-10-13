@@ -3,16 +3,22 @@ import type { KeyChoice } from '../model/keys'
 import type { Song } from '../model/song'
 
 export type ExportMode = 'mix' | 'practice-solo' | 'practice-muted'
+/** The whole song, or only the loop's bars (whether or not looping is switched on). */
+export type ExportRange = 'song' | 'loop'
 
 export interface ExportSettings {
   /** MP3 bitrate in kbps. */
   bitrate: number
   /** What the export contains: the current mix, only the practice part, or everything but it. */
   mode: ExportMode
+  range: ExportRange
 }
 
 export const EXPORT_BITRATES = [96, 128, 160, 192, 256, 320] as const
-export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { bitrate: 192, mode: 'mix' }
+export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { bitrate: 192, mode: 'mix', range: 'song' }
+/** Range for a base tempo set by the user (for files with wrong tempo information). */
+export const MIN_BASE_BPM = 20
+export const MAX_BASE_BPM = 400
 
 export const PRESET_VERSION = 1
 
@@ -38,6 +44,8 @@ export interface Preset {
   export: ExportSettings
   /** How the key is read, if the user changed it from the file's key. */
   key?: KeyChoice
+  /** The song's starting tempo in BPM, if the user corrected the file's. */
+  baseBpm?: number
 }
 
 export interface PlayerSettings {
@@ -49,6 +57,8 @@ export interface PlayerSettings {
   trackLabels: string[]
   /** How the key is read; null follows the key signature in the file. */
   keyChoice: KeyChoice | null
+  /** The song's starting tempo in BPM; null follows the file's tempo. */
+  baseBpm: number | null
 }
 
 export function createPreset(
@@ -70,7 +80,8 @@ export function createPreset(
       ...(settings.trackLabels[track.id] ? { label: settings.trackLabels[track.id] } : {})
     })),
     export: { ...settings.exportSettings },
-    ...(settings.keyChoice ? { key: { ...settings.keyChoice } } : {})
+    ...(settings.keyChoice ? { key: { ...settings.keyChoice } } : {}),
+    ...(settings.baseBpm !== null ? { baseBpm: settings.baseBpm } : {})
   }
 }
 
@@ -130,7 +141,8 @@ export function applyPreset(song: Song, preset: Preset, defaults: TrackMix[]): P
     selectedTrackId: selectedTrackId ?? song.tracks[0]?.id ?? null,
     exportSettings: preset.export,
     trackLabels: song.tracks.map((track) => matched[track.id]?.label ?? ''),
-    keyChoice: preset.key ?? null
+    keyChoice: preset.key ?? null,
+    baseBpm: preset.baseBpm ?? null
   }
 }
 
@@ -179,8 +191,12 @@ export function parsePreset(json: unknown): Preset {
       bitrate: (EXPORT_BITRATES as readonly number[]).includes(bitrate)
         ? bitrate
         : DEFAULT_EXPORT_SETTINGS.bitrate,
-      mode: mode === 'mix' || mode === 'practice-solo' || mode === 'practice-muted' ? mode : 'mix'
+      mode: mode === 'mix' || mode === 'practice-solo' || mode === 'practice-muted' ? mode : 'mix',
+      range: exportJson.range === 'loop' ? 'loop' : 'song'
     },
+    ...(typeof json.baseBpm === 'number' && Number.isFinite(json.baseBpm)
+      ? { baseBpm: number(json.baseBpm, MIN_BASE_BPM, MAX_BASE_BPM, 120) }
+      : {}),
     ...(keyJson &&
     (keyJson.accidentals === 'sharps' || keyJson.accidentals === 'flats') &&
     (keyJson.mode === 'major' || keyJson.mode === 'minor')

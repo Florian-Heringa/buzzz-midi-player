@@ -6,6 +6,7 @@ import { renderMp3 } from './renderMp3'
 export interface ExportWorkerData {
   soundFontPath: string
   midi: Uint8Array
+  startTick: number
   durationTicks: number
   tempoFactor: number
   bitrate: number
@@ -25,6 +26,7 @@ async function run(data: ExportWorkerData): Promise<void> {
   const { mp3, seconds } = await renderMp3({
     soundFont: toArrayBuffer(soundFont),
     midi: toArrayBuffer(data.midi),
+    startTick: data.startTick,
     durationTicks: data.durationTicks,
     tempoFactor: data.tempoFactor,
     bitrate: data.bitrate,
