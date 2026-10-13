@@ -349,6 +349,17 @@ select {
   padding: 16px 0;
 }
 
+.start-screen__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.start-screen__brand h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
 .start-screen__open {
   display: flex;
   align-items: center;

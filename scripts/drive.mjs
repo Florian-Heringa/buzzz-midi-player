@@ -87,6 +87,32 @@ try {
   await page.click('.start-page .settings-button')
   check('Settings opens from the start page', (await page.locator('.settings-dialog').count()) === 1)
   await page.keyboard.press('Escape')
+  check(
+    'the start page shows the app icon and name',
+    (await page.locator('.start-screen__brand img').evaluate((img) => img.complete && img.naturalWidth > 0)) &&
+      (await page.locator('.start-screen__brand h1').innerText()) === 'Buzzz Midi Player'
+  )
+
+  // Menus: a Help menu everywhere; developer tools only in development builds.
+  const menus = await app.evaluate(({ Menu }) =>
+    Object.fromEntries(Menu.getApplicationMenu().items.map((m) => [m.label, m.submenu.items.map((i) => i.label)]))
+  )
+  check(
+    'the Help menu has About, the website, problem reports and licenses',
+    ['About Buzzz Midi Player', 'Project Website', 'Report a Problem…', 'Third-Party Licenses'].every((label) =>
+      menus.Help?.includes(label)
+    ),
+    (menus.Help ?? []).filter(Boolean).join(', ')
+  )
+  check(
+    packaged ? 'a packaged app has no developer tools in its menu' : 'development builds offer developer tools',
+    menus.View.includes('Toggle Developer Tools') === !packaged,
+    menus.View.filter(Boolean).join(', ')
+  )
+  check(
+    'the page cannot open other windows or navigate away',
+    await page.evaluate(() => window.open('https://example.com') === null)
+  )
 
   // Make the open dialog return the MIDI file without user interaction.
   await app.evaluate(({ dialog }, path) => {

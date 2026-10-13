@@ -5,8 +5,18 @@
   "description": "MIDI player for practicing vocal parts",
   "main": "./out/main/index.js",
   "author": "Florian Heringa",
-  "homepage": "https://github.com/Florian-Heringa/electron-midi-player",
+  "homepage": "https://github.com/Florian-Heringa/buzzz-midi-player",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Florian-Heringa/buzzz-midi-player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Florian-Heringa/buzzz-midi-player/issues"
+  },
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
@@ -20,6 +30,7 @@
     "build:linux": "electron-vite build && electron-builder --linux --publish never",
     "fetch-soundfont": "node scripts/fetch-soundfont.mjs",
     "make-samples": "node scripts/make-samples.mjs",
+    "make-icon": "electron scripts/make-icon.mjs",
     "smoke": "electron-vite build && node scripts/drive.mjs",
     "build:dir": "electron-vite build && electron-builder --dir --publish never"
   },

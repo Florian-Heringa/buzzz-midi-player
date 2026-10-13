@@ -1,8 +1,10 @@
 appId: com.buzzz.midi-player
 productName: Buzzz Midi Player
+copyright: Copyright © 2026 Florian Heringa
+# No auto-update: releases are published by the GitHub workflow, not by electron-builder.
+publish: null
 directories:
   output: dist
-  buildResources: build
 files:
   - out/**
   - package.json
@@ -13,13 +15,24 @@ extraResources:
     filter:
       - '*.sf2'
       - '*LICENSE*'
-# One square PNG (1024px) for every platform; electron-builder makes the .ico and .icns.
-icon: _resources/MidiPlayerLogo.png
+  # The window and About icon at runtime.
+  - from: resources/icons/icon.png
+    to: icons/icon.png
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+# One square PNG (1024px, made by `npm run make-icon`) for every platform; electron-builder
+# makes the .ico and .icns.
+icon: resources/icons/icon.png
 # No spaces: release downloads keep their names.
 artifactName: buzzz-midi-player-${version}-${os}-${arch}.${ext}
 fileAssociations:
   - ext: [mid, midi]
-    name: MIDI file
+    # The file type's ID on Windows (unique, so other MIDI apps don't share it) and its Kind
+    # in the macOS Finder.
+    name: Buzzz Midi Player MIDI file
+    description: MIDI file
     role: Viewer
     mimeType: audio/midi
 
@@ -37,8 +50,6 @@ mac:
   target:
     - target: dmg
       arch: [x64, arm64]
-    - target: zip
-      arch: [x64, arm64]
   # Unsigned for now: ad-hoc signing only (Apple Silicon refuses to run unsigned code at all).
   identity: '-'
   notarize: false
@@ -48,7 +59,7 @@ dmg:
 linux:
   category: Audio
   # Debian packages need a maintainer with an email address.
-  maintainer: Florian Heringa <Florian-Heringa@users.noreply.github.com>
+  maintainer: Florian Heringa <19365751+Florian-Heringa@users.noreply.github.com>
   synopsis: MIDI player for practicing vocal parts
   target:
     - target: AppImage

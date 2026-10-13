@@ -1,25 +1,34 @@
 # Buzzz Midi Player
 
-An electron based MIDI player for practicing vocal parts. The player displays one track at a time and plays it back in the chosen tempo. 
+<img src="resources/icons/icon.png" alt="" width="96" align="right">
 
-The main idea is to provide a minimal interface to a MIDI file. A single track is shown at a time, under the assumption that someone only practices a single track. The other MIDI parts still play, and have their own volume control in the interface.
+A MIDI player for practicing vocal parts. Open a MIDI file, pick the part you're learning, and
+the player shows it as sheet music while the whole arrangement plays, at the tempo you choose.
+The other parts keep playing with their own volume, pan and sound, so you can turn your own part
+up, mute it to sing along, or loop the bars you're working on.
 
-## Main Features
+## Features
 
-- Import MIDI files
-- Export .mp3 files
-- Multitrack MIDI
-- Volume control per track
-- Playback tempo control
-- Saving/Loading presets for volume, tempo and export
-- Display single track as notes on a staff
-- Basic sound selection per track
-- Pan control per track
+- **Practice one part:** the chosen track is shown as sheet music or as a piano roll that
+  follows playback; solo or mute it with one click.
+- **Mixer:** volume, pan, mute, solo and instrument per track, with level meters and reset
+  buttons for all tracks at once.
+- **Tempo:** slow down or speed up (25–200%), and correct the song tempo when a file has it
+  wrong.
+- **Loops:** loop a range of bars, jump to its start or last bar.
+- **MP3 export:** the whole mix, only your part, or everything without your part; the whole
+  song or just the loop, played up to 20 times.
+- **Key:** read the key with sharps or flats, as major or minor, or use the key estimated from
+  the notes when the file's key signature is missing or wrong.
+- **Remembers your settings** for each file (mix, tempo, loop, track names, key), and saves or
+  loads them as preset files.
+- **Recent files** on the start screen and in File > Open Recent.
+- **Themes:** Modern, Classic, Old School and Retro, each in light and dark.
 
 ## Installing
 
 Download the installer for your system from the
-[releases page](https://github.com/Florian-Heringa/electron-midi-player/releases):
+[releases page](https://github.com/Florian-Heringa/buzzz-midi-player/releases):
 
 | System | File |
 |---|---|
@@ -36,6 +45,8 @@ The installers are not signed yet, so the system asks before running the app the
   is damaged, run `xattr -cr "/Applications/Buzzz Midi Player.app"` in Terminal and open
   it again.
 - **Linux:** make the AppImage executable (`chmod +x`, or Properties > Permissions), then run it.
+  On recent distributions AppImages need FUSE 2 (Ubuntu 22.04 and later:
+  `sudo apt install libfuse2`, or `libfuse2t64` on 24.04); the `.deb` doesn't.
 
 ## Development
 
@@ -52,11 +63,15 @@ npm run dev
 |---|---|
 | `npm run dev` | Start the app with hot reload |
 | `npm test` | Unit tests (vitest); the MP3 render test is skipped without the SoundFont |
-| `npm run smoke` | Build, then drive the app with Playwright: playback, mixer, staff, presets, export |
+| `npm run smoke` | Build, then drive the app with Playwright: playback, mixer, notation, presets, export |
 | `npm run typecheck` / `npm run lint` | Static checks |
 | `npm run make-samples` | Regenerate `samples/satb-chorale.mid` |
+| `npm run make-icon` | Regenerate the app icon `resources/icons/icon.png` from `resources/icons/logo.png` |
 | `npm run build:dir` | Package an unpacked app for this system into `dist/` |
 | `npm run build:win` / `build:mac` / `build:linux` | Build that system's installers into `dist/` (each only builds on its own system) |
+
+To run the smoke test against a packaged app instead of the development build, set
+`APP_EXECUTABLE`, e.g. `APP_EXECUTABLE="dist/win-unpacked/Buzzz Midi Player.exe" node scripts/drive.mjs`.
 
 ### Releasing
 
@@ -71,26 +86,27 @@ Linux:
 To test the installers without releasing, run the workflow by hand (Actions > Release > Run
 workflow); the installers are then downloadable from the run's artifacts.
 
-The app icon comes from `_resources/MidiPlayerLogo.png` (square, 1024px).
-
 ### How it works
 
 - **Song model** (`src/renderer/src/model`): MIDI files are parsed with `midi-file` into tracks
-  (split per channel), a tempo map and time/key signatures.
+  (a track using several channels is combined or split per channel, a setting), a tempo map and
+  time/key signatures.
 - **Playback** (`src/renderer/src/audio`): FluidSynth (WASM, via `js-synthesizer`) runs in an
   AudioWorklet and plays a generated MIDI file with one synth channel per track. Volume, pan and
   instrument are applied live; a small worklet hook (`worklet/mixerHook.js`) keeps them in effect
   after FluidSynth's player resets the synth on play and seek.
-- **Staff** (`src/renderer/src/notation`): the selected track is drawn as an SVG staff with notes
-  positioned by pitch and time.
-- **Export** (`src/main/export`): the same generated MIDI is rendered offline by FluidSynth in a
-  Node worker thread and encoded with lamejs.
-- **Presets** are auto-saved per MIDI file in the app's user data folder and can be saved to or
-  loaded from `.json` files.
+- **Notation** (`src/renderer/src/notation`): the piano roll is an SVG drawn from note pitches and
+  times. Sheet music is built from the track (`sheet/sheetModel.ts`: quantizing, bars, ties,
+  rests, accidentals) and drawn with VexFlow on one scrolling line; notes get room for their length
+  growing less than in proportion, never less than their symbols need.
+- **Export** (`src/main/export`): the same generated MIDI (cut to the loop and repeated, if chosen)
+  is rendered offline by FluidSynth in a Node worker thread and encoded with lamejs.
+- **Settings** are auto-saved per MIDI file in the app's user data folder and can be saved to or
+  loaded from `.json` preset files.
 
-### Third-party licenses
+## License
 
-- [GeneralUser GS](https://github.com/mrbumpy409/GeneralUser-GS) SoundFont by S. Christian
-  Collins: see `resources/soundfonts/GeneralUser-GS-LICENSE.txt`.
-- FluidSynth (bundled in `js-synthesizer`): LGPL-2.1.
-- lamejs (`@breezystack/lamejs`): LGPL-3.0.
+MIT, see [`LICENSE`](LICENSE). The app includes FluidSynth (LGPL-2.1), lamejs (LGPL-3.0), VexFlow
+with the Bravura font (MIT, SIL OFL), the GeneralUser GS SoundFont and other components under
+their own licenses: see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), also under
+Help > Third-Party Licenses in the app.

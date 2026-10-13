@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { RecentFile } from '@shared/api'
+import appIcon from '../../../../resources/icons/icon.png'
 
 const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
@@ -34,6 +35,11 @@ export function StartScreen({
 
   return (
     <div className="start-screen">
+      <header className="start-screen__brand">
+        <img src={appIcon} alt="" width={72} height={72} draggable={false} />
+        <h1>Buzzz Midi Player</h1>
+      </header>
+
       <div className="start-screen__open">
         <button className="button--primary" onClick={onOpen}>
           Open MIDI…

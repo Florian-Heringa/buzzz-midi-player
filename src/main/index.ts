@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { createHash } from 'crypto'
 import { cpSync, existsSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
@@ -12,6 +12,8 @@ const PRESET_FILTERS = [{ name: 'Player presets', extensions: ['json'] }]
 const MIDI_EXTENSION = /\.midi?$/i
 const SOUNDFONT_FILE = 'GeneralUser-GS.sf2'
 const SHA1_HEX = /^[0-9a-f]{40}$/
+const HOMEPAGE = 'https://github.com/Florian-Heringa/buzzz-midi-player'
+const COPYRIGHT = 'Copyright © 2026 Florian Heringa'
 
 const isMac = process.platform === 'darwin'
 
@@ -134,10 +136,28 @@ async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, 'utf8'))
 }
 
-/** SoundFonts ship as extra resources when packaged and live in resources/ during development. */
-function soundFontPath(): string {
+/**
+ * A file shipped as an extra resource (see electron-builder.yml): next to the app when
+ * packaged, in resources/ during development.
+ */
+function resourcePath(...parts: string[]): string {
   const base = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
-  return join(base, 'soundfonts', SOUNDFONT_FILE)
+  return join(base, ...parts)
+}
+
+function soundFontPath(): string {
+  return resourcePath('soundfonts', SOUNDFONT_FILE)
+}
+
+const iconPath = (): string => resourcePath('icons', 'icon.png')
+
+/** Opens the third-party notices; online if the system has no app for Markdown files. */
+async function showThirdPartyNotices(): Promise<void> {
+  const file = app.isPackaged
+    ? join(process.resourcesPath, 'THIRD_PARTY_NOTICES.md')
+    : join(app.getAppPath(), 'THIRD_PARTY_NOTICES.md')
+  const failed = await shell.openPath(file)
+  if (failed) await shell.openExternal(`${HOMEPAGE}/blob/main/THIRD_PARTY_NOTICES.md`)
 }
 
 function sendMenuCommand(command: MenuCommand): void {
@@ -216,9 +236,35 @@ function buildMenu(): void {
     ...(isMac ? [{ role: 'editMenu' } satisfies Electron.MenuItemConstructorOptions] : []),
     {
       label: 'View',
-      submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }]
+      submenu: [
+        // Developer tools only in development builds.
+        ...(app.isPackaged
+          ? []
+          : ([
+              { role: 'reload' },
+              { role: 'toggleDevTools' },
+              { type: 'separator' }
+            ] satisfies Electron.MenuItemConstructorOptions[])),
+        { role: 'togglefullscreen' }
+      ]
     },
-    ...(isMac ? [{ role: 'windowMenu' } satisfies Electron.MenuItemConstructorOptions] : [])
+    ...(isMac ? [{ role: 'windowMenu' } satisfies Electron.MenuItemConstructorOptions] : []),
+    {
+      role: 'help',
+      submenu: [
+        // macOS has About in the app menu.
+        ...(isMac
+          ? []
+          : ([
+              { label: `About ${app.name}`, click: () => app.showAboutPanel() },
+              { type: 'separator' }
+            ] satisfies Electron.MenuItemConstructorOptions[])),
+        { label: 'Project Website', click: () => void shell.openExternal(HOMEPAGE) },
+        { label: 'Report a Problem…', click: () => void shell.openExternal(`${HOMEPAGE}/issues`) },
+        { type: 'separator' },
+        { label: 'Third-Party Licenses', click: () => void showThirdPartyNotices() }
+      ]
+    }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
@@ -323,15 +369,20 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 500,
     title: 'Buzzz Midi Player',
+    // macOS takes the icon from the app bundle; elsewhere the window shows this one.
+    ...(isMac ? {} : { icon: iconPath() }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true
     }
   })
 
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  // The app is one page: links never replace it or open windows.
+  mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -385,6 +436,13 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(async () => {
+    app.setAboutPanelOptions({
+      applicationName: app.name,
+      applicationVersion: app.getVersion(),
+      copyright: COPYRIGHT,
+      website: HOMEPAGE,
+      iconPath: iconPath()
+    })
     recent = new RecentFilesStore(join(app.getPath('userData'), 'recent-files.json'))
     await recent.load()
     buildMenu()
