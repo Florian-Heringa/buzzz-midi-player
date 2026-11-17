@@ -7,6 +7,9 @@ the player shows it as sheet music while the whole arrangement plays, at the tem
 The other parts keep playing with their own volume, pan and sound, so you can turn your own part
 up, mute it to sing along, or loop the bars you're working on.
 
+Use it in the browser at **https://florian-heringa.github.io/buzzz-midi-player/**, or install
+the desktop app for Windows, macOS or Linux. Both are built from the same source.
+
 ## Features
 
 - **Practice one part:** the chosen track is shown as sheet music or as a piano roll that
@@ -27,6 +30,20 @@ up, mute it to sing along, or loop the bars you're working on.
 - **Update notice:** at startup (and from Help > Check for Updates…) the app asks GitHub for
   the latest release and shows a notice in the top right when a newer version is out. Nothing
   else is sent or collected; offline, it simply shows nothing.
+
+## Web version
+
+The [web version](https://florian-heringa.github.io/buzzz-midi-player/) runs entirely in the
+browser (tested in Chrome and Edge); MIDI files are never uploaded. The first
+visit downloads the 32 MB SoundFont. Compared to the desktop app:
+
+- Settings, auto-saved presets and recent files are kept in the browser (localStorage and
+  IndexedDB), so they are per browser and are lost when its site data is cleared. Recent files
+  are stored as copies, since a web page cannot reopen a file from disk.
+- Presets and MP3 exports are downloads; there is no "Show in folder".
+- There is no menu bar: Save/Load preset are buttons in the top bar, and the menu shortcuts
+  (Ctrl+O, Ctrl+E, Ctrl+Shift+S, Ctrl+Shift+O, Ctrl+,) work in the page.
+- No file associations or update notices (the page is always the latest version).
 
 ## Installing
 
@@ -65,8 +82,11 @@ npm run dev
 | Script | What it does |
 |---|---|
 | `npm run dev` | Start the app with hot reload |
+| `npm run dev:web` | Start the web version with hot reload (in your browser) |
+| `npm run build:web` / `npm run preview:web` | Build the web version into `out/web` / serve that build |
 | `npm test` | Unit tests (vitest); the MP3 render test is skipped without the SoundFont |
 | `npm run smoke` | Build, then drive the app with Playwright: playback, mixer, notation, presets, export |
+| `npm run smoke:web` | Build the web version, then drive it in an installed Chrome or Edge (`BROWSER` picks one) |
 | `npm run typecheck` / `npm run lint` | Static checks |
 | `npm run make-samples` | Regenerate `samples/satb-chorale.mid` |
 | `npm run make-icon` | Regenerate the app icon `resources/icons/icon.png` from `resources/icons/logo.png` |
@@ -89,7 +109,16 @@ Linux:
 To test the installers without releasing, run the workflow by hand (Actions > Release > Run
 workflow); the installers are then downloadable from the run's artifacts.
 
+The web version is published to GitHub Pages by `.github/workflows/pages.yml` on every push to
+`main` (or by hand: Actions > Pages > Run workflow). It needs Settings > Pages > Source set to
+**GitHub Actions** once.
+
 ### How it works
+
+- **Desktop and web** share all of the renderer (`src/renderer`). It reaches its host only
+  through `window.api` (`HostApi` in `src/shared/api.ts`): in the desktop app the preload script
+  forwards it to the main process; as a web page, `src/renderer/src/web/webApi.ts` implements it
+  with file pickers, downloads, localStorage, IndexedDB and a Web Worker.
 
 - **Song model** (`src/renderer/src/model`): MIDI files are parsed with `midi-file` into tracks
   (a track using several channels is combined or split per channel, a setting), a tempo map and
@@ -102,10 +131,11 @@ workflow); the installers are then downloadable from the run's artifacts.
   times. Sheet music is built from the track (`sheet/sheetModel.ts`: quantizing, bars, ties,
   rests, accidentals) and drawn with VexFlow on one scrolling line; notes get room for their length
   growing less than in proportion, never less than their symbols need.
-- **Export** (`src/main/export`): the same generated MIDI (cut to the loop and repeated, if chosen)
-  is rendered offline by FluidSynth in a Node worker thread and encoded with lamejs.
-- **Settings** are auto-saved per MIDI file in the app's user data folder and can be saved to or
-  loaded from `.json` preset files.
+- **Export** (`src/shared/export/renderMp3.ts`): the same generated MIDI (cut to the loop and
+  repeated, if chosen) is rendered offline by FluidSynth and encoded with lamejs, in a Node
+  worker thread (`src/main/export`) or, on the web, a Web Worker (`src/renderer/src/web`).
+- **Settings** are auto-saved per MIDI file (in the app's user data folder, or the browser's
+  localStorage) and can be saved to or loaded from `.json` preset files.
 
 ## License
 
