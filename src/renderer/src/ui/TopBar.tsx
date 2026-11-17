@@ -40,6 +40,7 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
           <button onClick={openExportDialog} disabled={!song}>
             Export MP3…
           </button>
+          {window.api.platform === 'web' && <PresetButtons />}
           <span className="top-bar__file">{song ? song.name : 'No file loaded'}</span>
           <SongSummary />
           <div className="top-bar__end">
@@ -66,6 +67,23 @@ export function TopBar({ onOpen }: { onOpen: () => void }): React.JSX.Element {
         </div>
       )}
     </div>
+  )
+}
+
+/** Save and load presets; the desktop app has these in its File menu. */
+function PresetButtons(): React.JSX.Element {
+  const song = useAppStore((s) => s.song)
+  const savePresetAs = useAppStore((s) => s.savePresetAs)
+  const loadPresetFromFile = useAppStore((s) => s.loadPresetFromFile)
+  return (
+    <>
+      <button onClick={() => void savePresetAs()} disabled={!song} title="Save preset (Ctrl+Shift+S)">
+        Save preset…
+      </button>
+      <button onClick={() => void loadPresetFromFile()} disabled={!song} title="Load preset (Ctrl+Shift+O)">
+        Load preset…
+      </button>
+    </>
   )
 }
 

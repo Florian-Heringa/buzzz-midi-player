@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { RecentFile } from '@shared/api'
 import appIcon from '../../../../resources/icons/icon.png'
 
+const RELEASES_URL = 'https://github.com/Florian-Heringa/buzzz-midi-player/releases/latest'
+
 const relativeTime = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
 /** "today", "yesterday", "3 days ago", "2 months ago". */
@@ -62,7 +64,14 @@ export function StartScreen({
                   className="start-screen__file"
                   onClick={() => onOpenRecent(file.path)}
                   disabled={!file.exists}
-                  title={file.exists ? file.path : `${file.path} (not found)`}
+                  // On the web the path is an internal id; the name says it all.
+                  title={
+                    window.api.platform === 'web'
+                      ? file.name
+                      : file.exists
+                        ? file.path
+                        : `${file.path} (not found)`
+                  }
                 >
                   <span className="start-screen__name">{file.name}</span>
                   <span className="start-screen__folder">{file.folder}</span>
@@ -82,6 +91,15 @@ export function StartScreen({
             ))}
           </ul>
         </section>
+      )}
+
+      {window.api.platform === 'web' && (
+        <p className="start-screen__desktop placeholder">
+          Also available as a desktop app for Windows, macOS and Linux:{' '}
+          <a href={RELEASES_URL} target="_blank" rel="noreferrer">
+            download
+          </a>
+        </p>
       )}
     </div>
   )

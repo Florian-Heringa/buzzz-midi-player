@@ -378,6 +378,10 @@ select {
   gap: 12px;
 }
 
+.start-screen__desktop {
+  margin: 0;
+}
+
 .start-screen__recent-header {
   display: flex;
   align-items: center;

@@ -399,7 +399,9 @@ export const useAppStore = create<AppState>((set, get) => {
           set({ exportDialogOpen: false })
           const name = result.path.split(/[\\/]/).pop() ?? result.path
           // The top bar lists the file (instead of a transient notice) so it can be opened later.
-          set({ lastExport: { path: result.path, name } })
+          // A web page cannot show its downloads, so there it is only a notice.
+          if (window.api.platform === 'web') get().showNotice(`Downloaded ${name}`)
+          else set({ lastExport: { path: result.path, name } })
         }
       } catch (err) {
         if (!exportCancelled) set({ error: `Export failed: ${errorText(err)}` })
