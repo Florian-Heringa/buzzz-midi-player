@@ -29,7 +29,10 @@ jobs:
           node-version: 24
           cache: npm
 
+      # The web build never runs Electron, so skip downloading its binary (about 100 MB).
       - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
       - run: npm run fetch-soundfont
       - run: npm run typecheck
       - run: npm run lint
