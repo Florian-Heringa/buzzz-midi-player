@@ -52,12 +52,17 @@ export type MenuCommand =
   | 'export-mp3'
   | 'open-settings'
 
-/** API exposed to the renderer through the preload script as `window.api`. */
-export interface ElectronApi {
+/**
+ * What the renderer needs from its host, available as `window.api`: the Electron app's
+ * preload script, or the browser implementation when running as a web page.
+ */
+export interface HostApi {
+  /** Which host the app runs in; the web version has no native menu, file explorer or updates. */
+  readonly platform: 'electron' | 'web'
   /** Shows an open dialog and reads the chosen MIDI file. Resolves to null when cancelled. */
   openMidiDialog(): Promise<LoadedMidiFile | null>
-  /** Reads a MIDI file from a known path (e.g. after drag-and-drop). */
-  readMidiFile(path: string): Promise<LoadedMidiFile>
+  /** Reads a MIDI file dropped onto the window. */
+  readDroppedFile(file: File): Promise<LoadedMidiFile>
   /** The MIDI file the app was launched with (e.g. from Explorer); returns it only once. */
   takeLaunchFile(): Promise<LoadedMidiFile | null>
   /** Recently opened files, newest first. */
@@ -96,8 +101,6 @@ export interface ElectronApi {
   onExportProgress(listener: (fraction: number) => void): () => void
   /** Makes the window frame and native menus follow the app's light/dark choice. */
   setNativeTheme(mode: 'system' | 'light' | 'dark'): Promise<void>
-  /** Resolves the filesystem path of a File dropped onto the window. */
-  getPathForFile(file: File): string
   /** Subscribes to application menu commands. Returns an unsubscribe function. */
   onMenuCommand(listener: (command: MenuCommand) => void): () => void
   /** The newer release found by the last update check, or null (none, or not checked yet). */

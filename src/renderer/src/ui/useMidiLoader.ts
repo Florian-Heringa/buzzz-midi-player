@@ -37,7 +37,7 @@ export function useMidiLoader(): {
         setError(`"${file.name}" is not a MIDI file.`)
         return
       }
-      await load(() => window.api.readMidiFile(window.api.getPathForFile(file)))
+      await load(() => window.api.readDroppedFile(file))
     },
     [load, setError]
   )

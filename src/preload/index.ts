@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IpcChannels, type ElectronApi, type MenuCommand } from '../shared/api'
+import { IpcChannels, type HostApi, type MenuCommand } from '../shared/api'
 
-const api: ElectronApi = {
+const api: HostApi = {
+  platform: 'electron',
   openMidiDialog: () => ipcRenderer.invoke(IpcChannels.openMidiDialog),
-  readMidiFile: (path) => ipcRenderer.invoke(IpcChannels.readMidiFile, path),
+  readDroppedFile: (file) =>
+    ipcRenderer.invoke(IpcChannels.readMidiFile, webUtils.getPathForFile(file)),
   takeLaunchFile: () => ipcRenderer.invoke(IpcChannels.takeLaunchFile),
   onOpenFile: (listener) => subscribe(IpcChannels.openFile, listener),
   getRecentFiles: () => ipcRenderer.invoke(IpcChannels.getRecentFiles),
@@ -22,7 +24,6 @@ const api: ElectronApi = {
   showExportInFolder: (path) => ipcRenderer.invoke(IpcChannels.showExportInFolder, path),
   onExportProgress: (listener) => subscribe(IpcChannels.exportProgress, listener),
   setNativeTheme: (mode) => ipcRenderer.invoke(IpcChannels.setNativeTheme, mode),
-  getPathForFile: (file) => webUtils.getPathForFile(file),
   onMenuCommand: (listener) => subscribe<MenuCommand>(IpcChannels.menuCommand, listener),
   getAvailableUpdate: () => ipcRenderer.invoke(IpcChannels.getAvailableUpdate),
   onAvailableUpdate: (listener) => subscribe(IpcChannels.availableUpdate, listener),
