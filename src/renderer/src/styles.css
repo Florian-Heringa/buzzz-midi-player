@@ -382,6 +382,10 @@ select {
   margin: 0;
 }
 
+.start-screen__desktop a {
+  color: var(--accent);
+}
+
 .start-screen__recent-header {
   display: flex;
   align-items: center;
