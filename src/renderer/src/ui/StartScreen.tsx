@@ -99,6 +99,10 @@ export function StartScreen({
           <a href={RELEASES_URL} target="_blank" rel="noreferrer">
             download
           </a>
+          {' · '}
+          <a href="THIRD_PARTY_NOTICES.txt" target="_blank" rel="noreferrer">
+            licenses
+          </a>
         </p>
       )}
     </div>

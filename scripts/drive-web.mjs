@@ -86,9 +86,19 @@ try {
   await page.goto(BASE)
   await page.waitForSelector('.start-screen')
   check('start screen renders on the web', true)
+  const links = await page
+    .locator('.start-screen__desktop a')
+    .evaluateAll((anchors) => anchors.map((a) => a.href))
   check(
-    'desktop download link shown',
-    (await page.locator('.start-screen__desktop a').count()) === 1
+    'desktop download and license links shown',
+    links.length === 2 &&
+      links[0].includes('/releases') &&
+      links[1] === `${BASE}THIRD_PARTY_NOTICES.txt`
+  )
+  const notices = await page.request.get(`${BASE}THIRD_PARTY_NOTICES.txt`)
+  check(
+    'license notices are served with the page',
+    notices.ok() && (await notices.text()).includes('FluidSynth')
   )
 
   const [chooser] = await Promise.all([
