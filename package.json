@@ -35,6 +35,7 @@
     "make-samples": "node scripts/make-samples.mjs",
     "make-icon": "electron scripts/make-icon.mjs",
     "smoke": "electron-vite build && node scripts/drive.mjs",
+    "smoke:web": "npm run build:web && node scripts/drive-web.mjs",
     "build:dir": "electron-vite build && electron-builder --dir --publish never"
   },
   "dependencies": {

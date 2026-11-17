@@ -14,7 +14,7 @@ export default tseslint.config(
   },
   {
     // Functions in the smoke test run inside the app page.
-    files: ['scripts/drive.mjs'],
+    files: ['scripts/drive.mjs', 'scripts/drive-web.mjs'],
     languageOptions: {
       globals: {
         window: 'readonly',
@@ -27,7 +27,11 @@ export default tseslint.config(
         localStorage: 'readonly',
         atob: 'readonly',
         getComputedStyle: 'readonly',
-        requestAnimationFrame: 'readonly'
+        requestAnimationFrame: 'readonly',
+        URL: 'readonly',
+        DataTransfer: 'readonly',
+        File: 'readonly',
+        DragEvent: 'readonly'
       }
     }
   },
