@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'fs'
+import libfluidsynth from 'js-synthesizer/libfluidsynth'
 import { writeMidi, type MidiEvent } from 'midi-file'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
@@ -44,6 +45,7 @@ describe.skipIf(!existsSync(SOUNDFONT))('renderMp3 (with the bundled SoundFont)'
 
   const render = (tempoFactor: number) =>
     renderMp3({
+      fluidSynth: libfluidsynth,
       soundFont: sfBuffer(),
       midi: oneNoteMidi(),
       durationTicks: 1920,
@@ -55,6 +57,7 @@ describe.skipIf(!existsSync(SOUNDFONT))('renderMp3 (with the bundled SoundFont)'
   it('renders the song plus a short tail and reports progress', { timeout: 60_000 }, async () => {
     const progress: number[] = []
     const { mp3, seconds } = await renderMp3({
+      fluidSynth: libfluidsynth,
       soundFont: sfBuffer(),
       midi: oneNoteMidi(),
       durationTicks: 1920,
@@ -74,6 +77,7 @@ describe.skipIf(!existsSync(SOUNDFONT))('renderMp3 (with the bundled SoundFont)'
   it('renders only from the start tick on', { timeout: 60_000 }, async () => {
     const whole = await render(1)
     const fromMiddle = await renderMp3({
+      fluidSynth: libfluidsynth,
       soundFont: sfBuffer(),
       midi: oneNoteMidi(),
       startTick: 960,

@@ -1,7 +1,8 @@
 // Worker thread: renders an MP3 export and writes it, reporting progress to the main process.
 import { readFile, writeFile } from 'fs/promises'
 import { parentPort, workerData } from 'worker_threads'
-import { renderMp3 } from './renderMp3'
+import libfluidsynth from 'js-synthesizer/libfluidsynth'
+import { renderMp3 } from '../../shared/export/renderMp3'
 
 export interface ExportWorkerData {
   soundFontPath: string
@@ -24,6 +25,7 @@ const post = (message: ExportWorkerMessage): void => parentPort?.postMessage(mes
 async function run(data: ExportWorkerData): Promise<void> {
   const soundFont = await readFile(data.soundFontPath)
   const { mp3, seconds } = await renderMp3({
+    fluidSynth: libfluidsynth,
     soundFont: toArrayBuffer(soundFont),
     midi: toArrayBuffer(data.midi),
     startTick: data.startTick,

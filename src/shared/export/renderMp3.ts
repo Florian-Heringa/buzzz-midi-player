@@ -1,6 +1,5 @@
 import { Mp3Encoder } from '@breezystack/lamejs'
 import { disableLogging, Synthesizer, waitForReady } from 'js-synthesizer'
-import libfluidsynth from 'js-synthesizer/libfluidsynth'
 
 /** `PlayerSetTempoType.Internal`: tempo value is a multiplier of the file's own tempo. */
 const TEMPO_TYPE_INTERNAL = 0
@@ -12,6 +11,12 @@ const TAIL_SILENCE = 1e-4
 const MAX_TAIL_SECONDS = 4
 
 export interface RenderOptions {
+  /**
+   * FluidSynth's Emscripten module, which each host loads its own way: in Node from
+   * `js-synthesizer/libfluidsynth`, in a browser worker as the global `Module` that
+   * `libfluidsynth-*.js` defines. Only the first call's module is used.
+   */
+  fluidSynth: unknown
   soundFont: ArrayBuffer
   /** Playback MIDI file with the export mix written at tick 0. */
   midi: ArrayBuffer
@@ -28,9 +33,9 @@ export interface RenderOptions {
 
 let fluidSynthReady: Promise<void> | null = null
 
-function ensureFluidSynth(): Promise<void> {
+function ensureFluidSynth(fluidSynth: unknown): Promise<void> {
   if (!fluidSynthReady) {
-    Synthesizer.initializeWithFluidSynthModule(libfluidsynth)
+    Synthesizer.initializeWithFluidSynthModule(fluidSynth)
     fluidSynthReady = waitForReady().then(() => disableLogging())
   }
   return fluidSynthReady
@@ -38,7 +43,7 @@ function ensureFluidSynth(): Promise<void> {
 
 /** Renders a MIDI file offline with FluidSynth and encodes it to stereo MP3. */
 export async function renderMp3(options: RenderOptions): Promise<{ mp3: Uint8Array; seconds: number }> {
-  await ensureFluidSynth()
+  await ensureFluidSynth(options.fluidSynth)
   const synth = new Synthesizer()
   synth.init(options.sampleRate)
   try {
